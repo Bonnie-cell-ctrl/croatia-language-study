@@ -2,8 +2,9 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V30 (原生发音版)</title>
+    <title>克语助手 V31 (发音破局版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -106,7 +107,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V30</h1>
+        <h1>🇭🇷 克语助手 V31</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -160,17 +161,17 @@
     <div id="challengeMain" class="challenge-body"></div>
 </div>
 
+<audio id="audioPlayer" playsinline></audio>
+
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v30')) || JSON.parse(localStorage.getItem('cro_v29')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v31')) || JSON.parse(localStorage.getItem('cro_v30')) || JSON.parse(localStorage.getItem('cro_v29')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = appData.length > 0 ? 0 : -1;
     let currentMode = 'quiz';
     let challengeList = [];
-    
-    // 初始化语音引擎
-    let synth = window.speechSynthesis;
+    const audioPlayer = document.getElementById('audioPlayer');
 
     function render() {
         const list = document.getElementById('wordListContainer');
@@ -275,9 +276,14 @@
         document.getElementById('mode-match').classList.toggle('active', mode === 'match');
     }
 
+    // 关键修复：点击开始挑战时，预加载/解锁音频
     function startChallenge() {
         const unit = appData[currentUnitIdx];
         if(!unit || unit.words.length === 0) return;
+        
+        // 尝试播放一个空声音，解锁移动端自动播放限制
+        play(' ');
+
         let base = [...unit.words];
         let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25));
         challengeList = [...base, ...extra].sort(() => Math.random() - 0.5);
@@ -374,26 +380,16 @@
         if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); }
     }
 
-    // 核心修改：使用浏览器原生 Web Speech API
+    // 核心修改：切回 Google 接口，并使用更宽松的 client=gtx
     function play(t) { 
-        if(!synth) return;
-        // 取消当前正在播放的
-        synth.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(t);
-        // 尝试设置克罗地亚语，如果设备不支持，会自动回退到默认
-        utterance.lang = 'hr-HR'; 
-        utterance.rate = 0.9; // 语速稍慢一点
-        
-        // 尝试寻找最佳语音包（选做）
-        const voices = synth.getVoices();
-        const hrVoice = voices.find(v => v.lang.includes('hr') || v.lang.includes('HR'));
-        if(hrVoice) utterance.voice = hrVoice;
-
-        synth.speak(utterance);
+        if(!t || t.trim() === '') return;
+        // 尝试使用 Google Translate 接口 (client=gtx 配合 no-referrer)
+        audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(t)}&tl=hr&client=gtx`;
+        // 增加错误捕获，防止报错卡死
+        audioPlayer.play().catch(e => { console.log('Auto-play blocked or network error', e); });
     }
 
-    function saveData() { localStorage.setItem('cro_v30', JSON.stringify(appData)); }
+    function saveData() { localStorage.setItem('cro_v31', JSON.stringify(appData)); }
     function jumpToUnit() { currentUnitIdx = document.getElementById('unitSelect').selectedIndex; render(); }
     function exitChallenge() { document.getElementById('challengeOverlay').style.display='none'; }
     
@@ -432,7 +428,7 @@
     function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); }
     function downloadAll() {
         const blob = new Blob([JSON.stringify(appData, null, 2)], {type: "application/json"});
-        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cro_v30.json`; a.click();
+        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cro_v31.json`; a.click();
     }
     function handleFileImport(input) {
         const r = new FileReader(); r.onload=(e)=>{ appData=[...JSON.parse(e.target.result), ...appData]; saveData(); render(); };
@@ -445,9 +441,6 @@
         } catch(e) { alert('错误'); }
     }
     render();
-    
-    // 预加载语音列表(解决部分浏览器第一次点击没声音的问题)
-    window.speechSynthesis.getVoices();
 </script>
 </body>
 </html>
