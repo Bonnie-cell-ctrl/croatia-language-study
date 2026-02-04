@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V29 (实时保存版)</title>
+    <title>克语助手 V30 (原生发音版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -106,7 +106,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V29</h1>
+        <h1>🇭🇷 克语助手 V30</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -160,17 +160,17 @@
     <div id="challengeMain" class="challenge-body"></div>
 </div>
 
-<audio id="audioPlayer" playsinline></audio>
-
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v29')) || JSON.parse(localStorage.getItem('cro_v28')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v30')) || JSON.parse(localStorage.getItem('cro_v29')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = appData.length > 0 ? 0 : -1;
     let currentMode = 'quiz';
     let challengeList = [];
-    const audioPlayer = document.getElementById('audioPlayer');
+    
+    // 初始化语音引擎
+    let synth = window.speechSynthesis;
 
     function render() {
         const list = document.getElementById('wordListContainer');
@@ -191,7 +191,6 @@
         unit.words.forEach((w, i) => {
             const row = document.createElement('div');
             row.className = 'word-row';
-            // 关键修改：将 onblur 改为 oninput，实现实时保存
             row.innerHTML = `
                 <div class="col-hr">
                     <span onclick="play('${w.hr.replace(/'/g, "\\'")}')">${audioIconSvg}</span>
@@ -200,7 +199,6 @@
                 <div class="col-cn" contenteditable="true" oninput="updateWord(${i}, 'cn', this)">${w.cn}</div>
                 <div class="del-word-btn" onclick="delWord(${i})">✕</div>
             `;
-            // 辅助：回车键仅失去焦点（也触发保存，双重保险）
             row.querySelectorAll('[contenteditable]').forEach(el => {
                 el.onfocus = () => el.classList.add('editing');
                 el.onblur = () => el.classList.remove('editing');
@@ -212,15 +210,11 @@
 
     function updateWord(idx, field, el) {
         const val = el.innerText.trim();
-        // 实时更新数据模型
         appData[currentUnitIdx].words[idx][field] = val;
-        
-        // 如果正在编辑错题本，同步更新永久错题记录
         if(appData[currentUnitIdx].name === "📕 错题本") {
             if(notebook[idx]) notebook[idx][field] = val;
             localStorage.setItem('cro_notebook', JSON.stringify(notebook));
         }
-        
         saveData();
     }
 
@@ -380,11 +374,26 @@
         if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); }
     }
 
+    // 核心修改：使用浏览器原生 Web Speech API
     function play(t) { 
-        audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(t)}&tl=hr&client=tw-ob`; 
-        audioPlayer.play().catch(()=>{}); 
+        if(!synth) return;
+        // 取消当前正在播放的
+        synth.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(t);
+        // 尝试设置克罗地亚语，如果设备不支持，会自动回退到默认
+        utterance.lang = 'hr-HR'; 
+        utterance.rate = 0.9; // 语速稍慢一点
+        
+        // 尝试寻找最佳语音包（选做）
+        const voices = synth.getVoices();
+        const hrVoice = voices.find(v => v.lang.includes('hr') || v.lang.includes('HR'));
+        if(hrVoice) utterance.voice = hrVoice;
+
+        synth.speak(utterance);
     }
-    function saveData() { localStorage.setItem('cro_v29', JSON.stringify(appData)); }
+
+    function saveData() { localStorage.setItem('cro_v30', JSON.stringify(appData)); }
     function jumpToUnit() { currentUnitIdx = document.getElementById('unitSelect').selectedIndex; render(); }
     function exitChallenge() { document.getElementById('challengeOverlay').style.display='none'; }
     
@@ -423,7 +432,7 @@
     function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); }
     function downloadAll() {
         const blob = new Blob([JSON.stringify(appData, null, 2)], {type: "application/json"});
-        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cro_v29.json`; a.click();
+        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cro_v30.json`; a.click();
     }
     function handleFileImport(input) {
         const r = new FileReader(); r.onload=(e)=>{ appData=[...JSON.parse(e.target.result), ...appData]; saveData(); render(); };
@@ -436,6 +445,9 @@
         } catch(e) { alert('错误'); }
     }
     render();
+    
+    // 预加载语音列表(解决部分浏览器第一次点击没声音的问题)
+    window.speechSynthesis.getVoices();
 </script>
 </body>
 </html>
