@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>克语助手 V29 (实时保存版)</title>
+    <style>
+        :root {
+            --primary: #0056b3;
+            --success: #28a745;
+            --danger: #dc3545;
+            --bg: #f7f9fc;
+        }
+        body {
+            font-family: -apple-system, sans-serif;
+            background-color: var(--bg); margin: 0; padding-top: 110px;
+            color: #333; user-select: none; -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 顶部 Header */
+        .sticky-header {
+            position: fixed; top: 0; left: 0; width: 100%;
+            background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            z-index: 1000; padding: 15px; box-sizing: border-box;
+            padding-top: max(15px, env(safe-area-inset-top));
+        }
+        .header-top { display: flex; justify-content: space-between; margin-bottom: 12px; }
+        h1 { margin: 0; font-size: 18px; color: var(--primary); font-weight: 800; }
+        
+        .nav-controls { display: flex; gap: 8px; max-width: 800px; margin: 0 auto; align-items: center; }
+        .nav-btn { 
+            background: #f0f2f5; color: #555; border: none; 
+            padding: 10px 18px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px;
+        }
+        select { 
+            flex: 1; padding: 10px; border: 1px solid #e1e4e8; border-radius: 10px; 
+            font-size: 15px; text-align: center; text-align-last: center; background: white;
+        }
+        .notebook-btn {
+            width: 25%; background: #eef2ff; color: #4f46e5; border: 1px solid #e0e7ff;
+            padding: 10px; border-radius: 10px; font-size: 18px; cursor: pointer;
+        }
+
+        .container { max-width: 800px; margin: 0 auto; padding: 0 15px 120px 15px; }
+
+        .challenge-box {
+            background: white; padding: 20px; border-radius: 20px; margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
+        }
+        .mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px; }
+        .mode-btn { 
+            padding: 14px; border-radius: 12px; border: 1px solid #eee; font-size: 14px; cursor: pointer;
+            background: #f9f9f9; font-weight: 600; color: #666; transition: all 0.2s;
+        }
+        .mode-btn.active { background: #6366f1; color: white; border-color: #6366f1; }
+
+        .start-btn {
+            width: 100%; margin-top: 15px; padding: 16px; border-radius: 15px;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            color: white; border: none; font-size: 18px; font-weight: bold; cursor: pointer;
+        }
+
+        .word-row {
+            display: flex; padding: 16px; background: white; border-radius: 12px;
+            margin-bottom: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+        .col-hr, .col-cn { flex: 1; padding: 4px; border-radius: 4px; }
+        .col-hr { font-weight: 600; display: flex; align-items: center; cursor: pointer; }
+        .col-cn { text-align: right; color: #666; cursor: text; }
+        .editing { background: #fff !important; border: 1px solid #6366f1 !important; outline: none; }
+        .del-word-btn { padding: 8px; margin-left: 10px; color: #ddd; cursor: pointer; font-size: 18px; }
+        .del-word-btn:hover { color: var(--danger); }
+        .icon-audio { width: 18px; height: 18px; margin-right: 12px; fill: var(--primary); flex-shrink: 0;}
+
+        #challengeOverlay {
+            display: none; position: fixed; inset: 0; background: white; z-index: 2000;
+            flex-direction: column; padding-top: env(safe-area-inset-top);
+        }
+        .challenge-header { display:flex; justify-content: space-between; padding:20px; border-bottom:1px solid #eee; align-items: center;}
+        .challenge-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;}
+
+        .quiz-option { width: 100%; max-width: 400px; padding: 18px; margin-bottom: 12px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; cursor: pointer; font-size: 16px;}
+        .quiz-option.correct { background: var(--success); color: white; border-color: var(--success); }
+        .quiz-option.wrong { background: var(--danger); color: white; border-color: var(--danger); }
+        
+        .match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 450px; }
+        .match-item { 
+            padding: 22px 10px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; 
+            background: #fff; font-size: 15px; transition: all 0.2s; cursor: pointer; font-weight: 500;
+        }
+        .match-item.selected { border-color: #6366f1; background: #f5f3ff; }
+        .match-item.match-correct { background: var(--success) !important; color: white !important; border-color: var(--success) !important; transform: scale(0.95); opacity: 0.5; }
+        .match-item.match-wrong { background: var(--danger) !important; color: white !important; border-color: var(--danger) !important; }
+        .match-item.hidden { visibility: hidden; pointer-events: none; }
+
+        .panel { display: none; background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
+        
+        .footer-del-btn {
+            width: 100%; padding: 15px; background: #fff; border: 2px solid #ffebeb; color: var(--danger);
+            border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="sticky-header">
+    <div class="header-top">
+        <h1>🇭🇷 克语助手 V29</h1>
+        <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
+    </div>
+    <div class="nav-controls">
+        <button class="nav-btn" onclick="changeUnit(1)">←</button>
+        <select id="unitSelect" onchange="jumpToUnit()"></select>
+        <button class="nav-btn" onclick="changeUnit(-1)">→</button>
+        <button class="notebook-btn" onclick="goToNotebook()">📕</button>
+    </div>
+</div>
+
+<div class="container">
+    <div class="challenge-box">
+        <div class="mode-selector">
+            <div class="mode-btn active" id="mode-quiz" onclick="setMode('quiz')">选择模式</div>
+            <div class="mode-btn" id="mode-match" onclick="setMode('match')">连连看模式</div>
+        </div>
+        <button class="start-btn" onclick="startChallenge()">开始挑战</button>
+    </div>
+
+    <div id="syncPanel" class="panel">
+        <button class="mode-btn" style="width:100%; margin-bottom:15px; background:#fff3cd; color:#856404; border:1px solid #ffeeba" onclick="removeDuplicates()">🧹 一键清理所有重复单词</button>
+        <button class="mode-btn" style="width:100%; margin-bottom:8px;" onclick="document.getElementById('fileInput').click()">⬆️ 导入文件</button>
+        <input type="file" id="fileInput" style="display:none" accept=".json" onchange="handleFileImport(this)">
+        <button class="mode-btn" style="width:100%; margin-bottom:15px;" onclick="downloadAll()">⬇️ 下载备份</button>
+        <textarea id="codeText" class="input-box" style="height:60px;" placeholder="代码区域..."></textarea>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+            <button class="mode-btn" onclick="copyFullCode()">复制全码</button>
+            <button class="mode-btn" onclick="importFromCode()">代码导入</button>
+        </div>
+    </div>
+
+    <div style="text-align:center; color:#6366f1; margin: 20px 0; cursor:pointer; font-weight:bold" onclick="togglePanel('importPanel')">＋ 录入新词</div>
+    <div id="importPanel" class="panel">
+        <input type="text" id="unitNameInput" class="input-box" placeholder="单元名称 (不填则添加到当前单元)">
+        <select id="insertAfterSelect" class="input-box" style="text-align: left; text-align-last: left;"></select>
+        <textarea id="importText" class="input-box" style="height:100px" placeholder="dva 2 (同名单词会自动覆盖更新)"></textarea>
+        <button class="start-btn" style="margin-top:0" onclick="importWords()">确认保存</button>
+    </div>
+
+    <div id="wordListContainer"></div>
+    
+    <button class="footer-del-btn" onclick="deleteCurrentUnit()">🗑️ 删除当前单元</button>
+</div>
+
+<div id="challengeOverlay">
+    <div class="challenge-header">
+        <button onclick="exitChallenge()" style="border:none; background:none; font-size:24px; color:#999">✕</button>
+        <div id="challengeProgress" style="font-weight:bold; color:#6366f1">0 / 0</div>
+        <label style="font-size:13px; color:#666"><input type="checkbox" id="autoVoice" checked> 自动发音</label>
+    </div>
+    <div id="challengeMain" class="challenge-body"></div>
+</div>
+
+<audio id="audioPlayer" playsinline></audio>
+
+<script>
+    const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+
+    let appData = JSON.parse(localStorage.getItem('cro_v29')) || JSON.parse(localStorage.getItem('cro_v28')) || [];
+    let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
+    let currentUnitIdx = appData.length > 0 ? 0 : -1;
+    let currentMode = 'quiz';
+    let challengeList = [];
+    const audioPlayer = document.getElementById('audioPlayer');
+
+    function render() {
+        const list = document.getElementById('wordListContainer');
+        const select = document.getElementById('unitSelect');
+        const insertSelect = document.getElementById('insertAfterSelect');
+        list.innerHTML = ''; select.innerHTML = '';
+        insertSelect.innerHTML = '<option value="-1">置顶添加</option>';
+
+        if (appData.length === 0) return;
+        appData.forEach((u, i) => {
+            select.add(new Option(u.name, i));
+            insertSelect.add(new Option(`在 ${u.name} 后`, i));
+            if(i === currentUnitIdx) select.selectedIndex = i;
+        });
+
+        const unit = appData[currentUnitIdx];
+        if(!unit) return;
+        unit.words.forEach((w, i) => {
+            const row = document.createElement('div');
+            row.className = 'word-row';
+            // 关键修改：将 onblur 改为 oninput，实现实时保存
+            row.innerHTML = `
+                <div class="col-hr">
+                    <span onclick="play('${w.hr.replace(/'/g, "\\'")}')">${audioIconSvg}</span>
+                    <span contenteditable="true" oninput="updateWord(${i}, 'hr', this)">${w.hr}</span>
+                </div>
+                <div class="col-cn" contenteditable="true" oninput="updateWord(${i}, 'cn', this)">${w.cn}</div>
+                <div class="del-word-btn" onclick="delWord(${i})">✕</div>
+            `;
+            // 辅助：回车键仅失去焦点（也触发保存，双重保险）
+            row.querySelectorAll('[contenteditable]').forEach(el => {
+                el.onfocus = () => el.classList.add('editing');
+                el.onblur = () => el.classList.remove('editing');
+                el.onkeydown = (e) => { if(e.key === 'Enter') { e.preventDefault(); el.blur(); } };
+            });
+            list.appendChild(row);
+        });
+    }
+
+    function updateWord(idx, field, el) {
+        const val = el.innerText.trim();
+        // 实时更新数据模型
+        appData[currentUnitIdx].words[idx][field] = val;
+        
+        // 如果正在编辑错题本，同步更新永久错题记录
+        if(appData[currentUnitIdx].name === "📕 错题本") {
+            if(notebook[idx]) notebook[idx][field] = val;
+            localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+        }
+        
+        saveData();
+    }
+
+    function changeUnit(dir) {
+        let n = currentUnitIdx + dir;
+        if(n >= 0 && n < appData.length) { currentUnitIdx = n; render(); }
+    }
+
+    function removeDuplicates() {
+        if(!confirm('确定要清理所有重复单词吗？')) return;
+        let removedCount = 0;
+        appData.forEach(unit => {
+            const uniqueMap = new Map();
+            const cleanWords = [];
+            unit.words.forEach(word => {
+                const key = word.hr.toLowerCase().trim();
+                if(!uniqueMap.has(key)) { uniqueMap.set(key, true); cleanWords.push(word); }
+                else { removedCount++; }
+            });
+            unit.words = cleanWords;
+        });
+        saveData(); render(); alert(`清理完成！共移除了 ${removedCount} 个重复单词。`);
+    }
+
+    function importWords() {
+        let name = document.getElementById('unitNameInput').value.trim();
+        const text = document.getElementById('importText').value.trim();
+        const after = parseInt(document.getElementById('insertAfterSelect').value);
+        if(!text) return;
+        let targetUnitIndex = -1;
+        if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
+
+        const newWords = text.split('\n').map(l => { 
+            let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); 
+            return i!==-1 ? {hr:l.slice(0,i).trim(), cn:l.slice(i).replace(/^[,;，；\s]+/,"").trim()} : {hr:l.trim(), cn:""}; 
+        }).filter(w => w.hr);
+
+        if (targetUnitIndex !== -1) {
+            const unit = appData[targetUnitIndex];
+            newWords.forEach(nw => {
+                const existIdx = unit.words.findIndex(old => old.hr.toLowerCase() === nw.hr.toLowerCase());
+                if (existIdx !== -1) unit.words[existIdx].cn = nw.cn;
+                else unit.words.push(nw);
+            });
+            alert(`已更新/添加到 "${unit.name}"`);
+        } else {
+            if(!name) name = "新单元";
+            const newUnit = {name, words: newWords};
+            if(after === -1) appData.unshift(newUnit); else appData.splice(after+1, 0, newUnit);
+        }
+        saveData(); render(); togglePanel('importPanel');
+        document.getElementById('importText').value = ''; 
+    }
+
+    function setMode(mode) {
+        currentMode = mode;
+        document.getElementById('mode-quiz').classList.toggle('active', mode === 'quiz');
+        document.getElementById('mode-match').classList.toggle('active', mode === 'match');
+    }
+
+    function startChallenge() {
+        const unit = appData[currentUnitIdx];
+        if(!unit || unit.words.length === 0) return;
+        let base = [...unit.words];
+        let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25));
+        challengeList = [...base, ...extra].sort(() => Math.random() - 0.5);
+        document.getElementById('challengeOverlay').style.display = 'flex';
+        showQuestion();
+    }
+
+    function showQuestion() {
+        if(challengeList.length === 0) { alert("恭喜！本轮复习完成"); return exitChallenge(); }
+        const main = document.getElementById('challengeMain');
+        main.innerHTML = '';
+        document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
+
+        if(currentMode === 'quiz') {
+            const current = challengeList[0];
+            if(document.getElementById('autoVoice').checked) play(current.hr);
+            main.innerHTML = `<div style="font-size:28px; margin-bottom:30px; font-weight:bold; color:#6366f1">${current.hr}</div>`;
+            const options = [current];
+            const all = appData[currentUnitIdx].words;
+            while(options.length < Math.min(all.length, 4)) {
+                const r = all[Math.floor(Math.random() * all.length)];
+                if(!options.includes(r)) options.push(r);
+            }
+            options.sort(() => Math.random() - 0.5).forEach(opt => {
+                const btn = document.createElement('div');
+                btn.className = 'quiz-option'; btn.innerText = opt.cn;
+                btn.onclick = () => {
+                    if(opt === current) { 
+                        btn.classList.add('correct'); 
+                        setTimeout(() => { challengeList.shift(); showQuestion(); }, 500); 
+                    } else { 
+                        btn.classList.add('wrong'); 
+                        addToNotebook(current); 
+                    }
+                };
+                main.appendChild(btn);
+            });
+        } else {
+            const num = Math.min(challengeList.length, 4);
+            const currentBatch = challengeList.slice(0, num);
+            const items = [...currentBatch.map(s => ({t: s.hr, id: s.hr, type:'hr'})), ...currentBatch.map(s => ({t: s.cn, id: s.hr, type:'cn'}))].sort(() => Math.random() - 0.5);
+            main.innerHTML = `<div class="match-grid"></div>`;
+            const grid = main.querySelector('.match-grid');
+            
+            let first = null;
+            let matchedCount = 0;
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'match-item'; div.innerText = item.t;
+                div.onclick = () => {
+                    if(div.classList.contains('hidden') || div.classList.contains('match-correct')) return;
+                    if(item.type === 'hr') play(item.t);
+                    div.classList.add('selected');
+
+                    if(!first) { 
+                        first = {div, item}; 
+                    } else {
+                        if(first.div === div) return; 
+
+                        if(first.item.id === item.id) {
+                            first.div.className = 'match-item match-correct';
+                            div.className = 'match-item match-correct';
+                            matchedCount++; 
+                            const fDiv = first.div; const sDiv = div;
+                            setTimeout(() => { 
+                                fDiv.classList.add('hidden'); sDiv.classList.add('hidden'); 
+                                if(matchedCount === num) {
+                                    challengeList.splice(0, num);
+                                    showQuestion();
+                                }
+                            }, 400);
+                        } else {
+                            div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong';
+                            addToNotebook(challengeList.find(c => c.hr === item.id || c.hr === first.item.id));
+                            const fDiv = first.div; const sDiv = div;
+                            setTimeout(() => { 
+                                sDiv.className = 'match-item'; fDiv.className = 'match-item'; 
+                            }, 500);
+                        }
+                        first = null;
+                    }
+                };
+                grid.appendChild(div);
+            });
+        }
+    }
+
+    function addToNotebook(word) {
+        if(!notebook.some(w => w.hr === word.hr)) {
+            notebook.push(word);
+            localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+        }
+        if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); }
+    }
+
+    function play(t) { 
+        audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(t)}&tl=hr&client=tw-ob`; 
+        audioPlayer.play().catch(()=>{}); 
+    }
+    function saveData() { localStorage.setItem('cro_v29', JSON.stringify(appData)); }
+    function jumpToUnit() { currentUnitIdx = document.getElementById('unitSelect').selectedIndex; render(); }
+    function exitChallenge() { document.getElementById('challengeOverlay').style.display='none'; }
+    
+    function delWord(i) { 
+        if(confirm('确认删除这个单词吗？')) { 
+            if(appData[currentUnitIdx].name === "📕 错题本") {
+                notebook.splice(i, 1);
+                localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+            }
+            appData[currentUnitIdx].words.splice(i,1); 
+            saveData(); 
+            render(); 
+        }
+    }
+
+    function deleteCurrentUnit() { 
+        if(confirm('⚠️ 确定要删除整个单元吗？')) { 
+            if(appData[currentUnitIdx].name === "📕 错题本") {
+                notebook = [];
+                localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+            }
+            appData.splice(currentUnitIdx,1); 
+            currentUnitIdx=0; 
+            saveData(); 
+            render(); 
+        }
+    }
+
+    function togglePanel(id) { const p=document.getElementById(id); p.style.display= (p.style.display==='block'?'none':'block'); }
+    function goToNotebook() {
+        if(notebook.length===0) return alert('错题本是空的，真棒！');
+        const name="📕 错题本"; const idx=appData.findIndex(u => u.name === name);
+        if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook});
+        currentUnitIdx=0; render();
+    }
+    function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); }
+    function downloadAll() {
+        const blob = new Blob([JSON.stringify(appData, null, 2)], {type: "application/json"});
+        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cro_v29.json`; a.click();
+    }
+    function handleFileImport(input) {
+        const r = new FileReader(); r.onload=(e)=>{ appData=[...JSON.parse(e.target.result), ...appData]; saveData(); render(); };
+        r.readAsText(input.files[0]);
+    }
+    function importFromCode() {
+        try {
+            const data = JSON.parse(document.getElementById('codeText').value);
+            appData = [...data, ...appData]; saveData(); render(); alert('导入成功');
+        } catch(e) { alert('错误'); }
+    }
+    render();
+</script>
+</body>
+</html>
