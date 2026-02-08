@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V32.1 (稳定拖拽版)</title>
+    <title>克语助手 V32.2 (修复显示版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -17,7 +17,7 @@
             font-family: -apple-system, sans-serif;
             background-color: var(--bg); margin: 0; padding-top: 110px;
             color: #333; 
-            overscroll-behavior-y: contain; /* 防止拖拽时触发页面滚动 */
+            overscroll-behavior-y: contain; 
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -62,10 +62,14 @@
             color: white; border: none; font-size: 18px; font-weight: bold; cursor: pointer;
         }
 
-        /* --- 列表样式 --- */
+        /* --- 列表布局修复 --- */
         .word-row {
-            display: flex; padding: 16px; background: white; border-radius: 12px;
-            margin-bottom: 10px; align-items: flex-start; /* 顶部对齐以适应多行 */
+            display: flex; 
+            padding: 16px; 
+            background: white; 
+            border-radius: 12px;
+            margin-bottom: 10px; 
+            align-items: center; /* 默认垂直居中 */
             box-shadow: 0 2px 5px rgba(0,0,0,0.02);
             position: relative;
             transition: transform 0.1s, box-shadow 0.1s;
@@ -81,36 +85,61 @@
             border: 2px solid #6366f1;
         }
 
-        /* 关键修改：允许换行显示 */
-        .col-hr, .col-cn { 
-            padding: 4px; border-radius: 4px; 
-            white-space: pre-wrap; /* 允许回车换行显示 */
-            word-break: break-word; /* 防止长单词溢出 */
-            line-height: 1.5;
+        /* 左侧容器：包含喇叭和克语 */
+        .left-part {
+            flex: 1; /* 占据剩余空间 */
+            display: flex;
+            align-items: flex-start; /* 顶部对齐，适应多行 */
+            min-width: 0; /* 关键：防止 flex 子项溢出 */
+            margin-right: 10px;
         }
-        .col-hr { flex: 6; font-weight: 600; margin-right: 8px; }
-        .col-cn { flex: 3; text-align: right; color: #666; }
+
+        /* 关键修复：CSS 换行规则 */
+        .col-hr { 
+            font-weight: 600; 
+            white-space: pre-wrap; /* 允许识别回车键 */
+            word-wrap: break-word; /* 正常换行 */
+            overflow-wrap: break-word; /* 防止长单词撑开 */
+            line-height: 1.4;
+        }
+
+        /* 中文列 */
+        .col-cn { 
+            flex: 0 0 auto; /* 不放大也不缩小 */
+            max-width: 35%; /* 最大宽度 */
+            text-align: right; 
+            color: #666; 
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+        }
 
         .editing { 
             background: #fff !important; 
-            border: 1px solid #6366f1 !important; 
+            border-bottom: 1px solid #6366f1 !important; 
             outline: none; 
             min-height: 24px;
         }
 
-        .icon-audio { width: 22px; height: 22px; margin-right: 8px; fill: var(--primary); flex-shrink: 0; margin-top: 4px; cursor: pointer;}
+        .icon-audio { width: 22px; height: 22px; margin-right: 10px; fill: var(--primary); flex-shrink: 0; margin-top: 2px; cursor: pointer;}
 
         /* 操作区：删除 + 拖拽手柄 */
         .action-area {
-            width: 40px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; margin-left: 5px; gap: 15px;
+            flex: 0 0 30px; /* 固定宽度 */
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            margin-left: 8px; 
+            gap: 12px;
         }
-        .del-word-btn { color: #ddd; cursor: pointer; font-size: 18px; padding: 5px; }
+        .del-word-btn { color: #ddd; cursor: pointer; font-size: 16px; padding: 4px; }
         .del-word-btn:hover { color: var(--danger); }
         
         /* 拖拽手柄图标 */
         .drag-handle {
-            color: #ccc; cursor: grab; font-size: 24px; padding: 5px 10px;
-            touch-action: none; /* 关键：交给JS处理触摸 */
+            color: #ccc; cursor: grab; font-size: 20px; padding: 4px;
+            touch-action: none; 
             user-select: none;
         }
         .drag-handle:active { color: var(--primary); cursor: grabbing; }
@@ -138,7 +167,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V32.1</h1>
+        <h1>🇭🇷 克语助手 V32.2</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -196,15 +225,12 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    // 尝试兼容读取所有旧版本数据
-    let appData = JSON.parse(localStorage.getItem('cro_v32_1')) || JSON.parse(localStorage.getItem('cro_v32')) || JSON.parse(localStorage.getItem('cro_v31')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v32_2')) || JSON.parse(localStorage.getItem('cro_v32_1')) || JSON.parse(localStorage.getItem('cro_v32')) || JSON.parse(localStorage.getItem('cro_v31')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = appData.length > 0 ? 0 : -1;
     let currentMode = 'quiz';
     let challengeList = [];
     const audioPlayer = document.getElementById('audioPlayer');
-    
-    // 拖拽变量
     let dragEl = null;
 
     function render() {
@@ -218,7 +244,7 @@
 
         if (appData.length === 0) { 
             nameInput.placeholder = "单元名称"; 
-            list.innerHTML = '<div style="text-align:center;color:#999;padding:40px">暂无单词，请点击上方“录入”</div>';
+            list.innerHTML = '<div style="text-align:center;color:#999;padding:40px">暂无单词</div>';
             return; 
         }
         
@@ -239,13 +265,10 @@
             const row = document.createElement('div');
             row.className = 'word-row';
             
-            // 内部结构
             row.innerHTML = `
-                <div style="display:flex; flex-direction:column; flex:1">
-                    <div style="display:flex; align-items:flex-start">
-                        <span onclick="play('${w.hr.replace(/'/g, "\\'")}')">${audioIconSvg}</span>
-                        <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
-                    </div>
+                <div class="left-part">
+                    <span onclick="play('${w.hr.replace(/'/g, "\\'")}')">${audioIconSvg}</span>
+                    <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
                 </div>
                 <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${w.cn}</div>
                 <div class="action-area">
@@ -254,7 +277,6 @@
                 </div>
             `;
 
-            // 绑定拖拽事件 (Handle 模式)
             const handle = row.querySelector('.drag-handle');
             handle.addEventListener('touchstart', handleTouchStart, {passive: false});
             handle.addEventListener('touchmove', handleTouchMove, {passive: false});
@@ -265,7 +287,7 @@
         });
     }
 
-    // --- 简单稳定的拖拽逻辑 ---
+    // --- 拖拽逻辑 ---
     function handleTouchStart(e) {
         dragEl = this.closest('.word-row');
         dragEl.classList.add('dragging');
@@ -273,14 +295,13 @@
 
     function handleTouchMove(e) {
         if (!dragEl) return;
-        e.preventDefault(); // 阻止滚动
+        e.preventDefault(); 
         const touch = e.touches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
         const targetRow = target ? target.closest('.word-row') : null;
 
         if (targetRow && targetRow !== dragEl) {
             const list = document.getElementById('wordListContainer');
-            // 简单的 DOM 交换
             const children = Array.from(list.children);
             if (children.indexOf(dragEl) < children.indexOf(targetRow)) {
                 list.insertBefore(dragEl, targetRow.nextSibling);
@@ -294,10 +315,9 @@
         if (!dragEl) return;
         dragEl.classList.remove('dragging');
         dragEl = null;
-        rebuildDataFromDOM(); // 保存新顺序
+        rebuildDataFromDOM(); 
     }
 
-    // 鼠标支持 (电脑端)
     function handleMouseDown(e) {
         dragEl = this.closest('.word-row');
         dragEl.classList.add('dragging');
@@ -337,7 +357,7 @@
         });
         appData[currentUnitIdx].words = newWords;
         saveData();
-        render(); // 刷新以更新索引
+        render(); 
     }
 
     // --- 双击编辑 (回车换行) ---
@@ -345,10 +365,7 @@
         el.contentEditable = true;
         el.focus();
         el.classList.add('editing');
-        
-        // 移除所有键盘监听，恢复默认的回车换行行为
         el.onkeydown = null; 
-        
         el.onblur = () => {
             el.contentEditable = false;
             el.classList.remove('editing');
@@ -358,7 +375,6 @@
 
     function updateWord(idx, field, val) {
         appData[currentUnitIdx].words[idx][field] = val;
-        // 同步更新错题本
         if(appData[currentUnitIdx].name === "📕 错题本") {
             if(notebook[idx]) notebook[idx][field] = val;
             localStorage.setItem('cro_notebook', JSON.stringify(notebook));
@@ -366,7 +382,7 @@
         saveData();
     }
 
-    // --- 通用功能 ---
+    // --- 基础功能 ---
     function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; render(); } }
     
     function importWords() {
@@ -471,7 +487,7 @@
 
     function addToNotebook(word) { if(!notebook.some(w => w.hr === word.hr)) { notebook.push(word); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); } }
     function removeDuplicates() { if(!confirm('确定清理重复？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
-    function saveData() { localStorage.setItem('cro_v32_1', JSON.stringify(appData)); }
+    function saveData() { localStorage.setItem('cro_v32_2', JSON.stringify(appData)); }
     function delWord(i) { if(confirm('删除？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook.splice(i,1); localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
     function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook=[]; localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); }}
     function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
