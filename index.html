@@ -336,4 +336,118 @@
         });
         appData[currentUnitIdx].words = newWords;
         saveData();
-        // 这里不调用render，因为DOM
+        // 这里不调用render，因为DOM已经是正确的，避免闪烁
+        // 但需要更新 onclick 里的 index 引用，所以稍微麻烦点
+        // 为了稳妥，重新 render 一次以绑定正确的索引
+        render(); 
+    }
+
+    // --- 双击编辑功能 (支持回车换行) ---
+    function enableEdit(el, idx, field) {
+        el.contentEditable = true;
+        el.focus();
+        el.classList.add('editing');
+        
+        // 移除旧的回车监听，允许默认换行行为
+        el.onblur = () => {
+            el.contentEditable = false;
+            el.classList.remove('editing');
+            // 使用 innerText 获取内容，它会自动识别换行符
+            updateWord(idx, field, el.innerText);
+        };
+    }
+
+    function updateWord(idx, field, val) {
+        appData[currentUnitIdx].words[idx][field] = val;
+        if(appData[currentUnitIdx].name === "📕 错题本") {
+            if(notebook[idx]) notebook[idx][field] = val;
+            localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+        }
+        saveData();
+    }
+
+    // --- 基础功能保持不变 ---
+    function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; render(); } }
+    function importWords() {
+        let name = document.getElementById('unitNameInput').value.trim();
+        const text = document.getElementById('importText').value.trim();
+        const after = parseInt(document.getElementById('insertAfterSelect').value);
+        if(!text) return;
+        let targetUnitIndex = -1;
+        if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
+        const newWords = text.split('\n').map(l => { 
+            let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); 
+            return i!==-1 ? {hr:l.slice(0,i).trim(), cn:l.slice(i).replace(/^[,;，；\s]+/,"").trim()} : {hr:l.trim(), cn:""}; 
+        }).filter(w => w.hr);
+        if (targetUnitIndex !== -1) {
+            const unit = appData[targetUnitIndex];
+            newWords.forEach(nw => {
+                const existIdx = unit.words.findIndex(old => old.hr.toLowerCase() === nw.hr.toLowerCase());
+                if (existIdx !== -1) unit.words[existIdx].cn = nw.cn; else unit.words.push(nw);
+            });
+            alert(`已更新/添加到旧单元: "${unit.name}"`);
+        } else {
+            if(!name) name = "新单元"; const newUnit = {name, words: newWords};
+            if(after === -1) appData.unshift(newUnit); else appData.splice(after+1, 0, newUnit);
+            alert(`已创建新单元: "${name}"`);
+        }
+        saveData(); render(); togglePanel('importPanel'); document.getElementById('importText').value = ''; 
+    }
+    function play(t) { if(!t || t.trim() === '') return; audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(t)}&tl=hr&client=gtx`; audioPlayer.play().catch(e => { console.log('Blocked', e); }); }
+    function setMode(mode) { currentMode = mode; document.getElementById('mode-quiz').classList.toggle('active', mode === 'quiz'); document.getElementById('mode-match').classList.toggle('active', mode === 'match'); }
+    function startChallenge() {
+        const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return;
+        play(' '); let base = [...unit.words]; let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25));
+        challengeList = [...base, ...extra].sort(() => Math.random() - 0.5); document.getElementById('challengeOverlay').style.display = 'flex'; showQuestion();
+    }
+    function showQuestion() {
+        if(challengeList.length === 0) { alert("恭喜！复习完成"); return exitChallenge(); }
+        const main = document.getElementById('challengeMain'); main.innerHTML = ''; document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
+        if(currentMode === 'quiz') {
+            const current = challengeList[0]; if(document.getElementById('autoVoice').checked) play(current.hr);
+            main.innerHTML = `<div style="font-size:28px; margin-bottom:30px; font-weight:bold; color:#6366f1; text-align:center; white-space: pre-wrap">${current.hr}</div>`;
+            const options = [current]; const all = appData[currentUnitIdx].words;
+            while(options.length < Math.min(all.length, 4)) { const r = all[Math.floor(Math.random() * all.length)]; if(!options.includes(r)) options.push(r); }
+            options.sort(() => Math.random() - 0.5).forEach(opt => {
+                const btn = document.createElement('div'); btn.className = 'quiz-option'; btn.innerText = opt.cn;
+                btn.onclick = () => { if(opt === current) { btn.classList.add('correct'); setTimeout(() => { challengeList.shift(); showQuestion(); }, 500); } else { btn.classList.add('wrong'); addToNotebook(current); } }; main.appendChild(btn);
+            });
+        } else {
+            const num = Math.min(challengeList.length, 4); const currentBatch = challengeList.slice(0, num);
+            const items = [...currentBatch.map(s => ({t: s.hr, id: s.hr, type:'hr'})), ...currentBatch.map(s => ({t: s.cn, id: s.hr, type:'cn'}))].sort(() => Math.random() - 0.5);
+            main.innerHTML = `<div class="match-grid"></div>`; const grid = main.querySelector('.match-grid'); let first = null; let matchedCount = 0;
+            items.forEach(item => {
+                const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t;
+                div.onclick = () => {
+                    if(div.classList.contains('hidden') || div.classList.contains('match-correct')) return;
+                    if(item.type === 'hr') play(item.t);
+                    div.classList.add('selected');
+                    if(!first) { first = {div, item}; } else {
+                        if(first.div === div) return; 
+                        if(first.item.id === item.id) {
+                            first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; 
+                            const fDiv = first.div; const sDiv = div; setTimeout(() => { fDiv.classList.add('hidden'); sDiv.classList.add('hidden'); if(matchedCount === num) { challengeList.splice(0, num); showQuestion(); } }, 400);
+                        } else {
+                            div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id || c.hr === first.item.id));
+                            const fDiv = first.div; const sDiv = div; setTimeout(() => { sDiv.className = 'match-item'; fDiv.className = 'match-item'; }, 500);
+                        } first = null;
+                    }
+                }; grid.appendChild(div);
+            });
+        }
+    }
+    function addToNotebook(word) { if(!notebook.some(w => w.hr === word.hr)) { notebook.push(word); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); } }
+    function removeDuplicates() { if(!confirm('确定要清理所有重复单词吗？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
+    function saveData() { localStorage.setItem('cro_v33', JSON.stringify(appData)); }
+    function delWord(i) { if(confirm('确认删除？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook.splice(i,1); localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
+    function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook=[]; localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); }}
+    function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
+    function goToNotebook() { if(notebook.length===0) return alert('空'); const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); currentUnitIdx=0; render(); }
+    function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); }
+    function downloadAll() { const b=new Blob([JSON.stringify(appData,null,2)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`cro_v33.json`; a.click(); }
+    function handleFileImport(i) { const r=new FileReader(); r.onload=(e)=>{ appData=[...JSON.parse(e.target.result),...appData]; saveData(); render(); }; r.readAsText(i.files[0]); }
+    function importFromCode() { try { appData=[...JSON.parse(document.getElementById('codeText').value),...appData]; saveData(); render(); alert('成功'); } catch(e){alert('错误');} }
+    render();
+</script>
+</body>
+</html>
