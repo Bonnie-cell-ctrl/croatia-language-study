@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V33 (换行发音修复版)</title>
+    <title>克语助手 V34 (防误触修复版)</title>
     <style>
         :root {
             --primary: #0056b3;
             --success: #28a745;
             --danger: #dc3545;
             --bg: #f7f9fc;
-            --drag-bg: #eef2ff;
+            --drag-bg: #fff9c4; /* 拖拽时变黄，提示更明显 */
         }
         body {
             font-family: -apple-system, sans-serif;
@@ -19,6 +19,8 @@
             color: #333; 
             overscroll-behavior-y: contain; 
             -webkit-tap-highlight-color: transparent;
+            /* 禁止长按选中文本，避免和拖拽冲突 */
+            -webkit-user-select: none; user-select: none;
         }
 
         .sticky-header {
@@ -64,79 +66,64 @@
 
         /* --- 列表布局 --- */
         .word-row {
-            display: flex; 
-            padding: 16px; 
-            background: white; 
-            border-radius: 12px;
-            margin-bottom: 10px; 
-            align-items: center; 
+            display: flex; padding: 16px; background: white; border-radius: 12px;
+            margin-bottom: 10px; align-items: center; /* 默认垂直居中 */
             box-shadow: 0 2px 5px rgba(0,0,0,0.02);
             position: relative;
-            transition: transform 0.1s, box-shadow 0.1s;
+            transition: transform 0.2s, background-color 0.2s;
         }
         
+        /* 拖拽激活时的样式 */
         .word-row.dragging {
-            opacity: 0.9;
-            background: var(--drag-bg);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            background: var(--drag-bg); /* 变黄 */
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
             z-index: 100;
-            transform: scale(1.02);
-            border: 2px solid #6366f1;
+            transform: scale(1.03); /* 微微放大 */
+            border: 1px solid #ffe082;
         }
 
         .left-part {
-            flex: 1; 
-            display: flex;
-            align-items: flex-start; 
-            min-width: 0; 
-            margin-right: 10px;
+            flex: 1; display: flex; align-items: flex-start; min-width: 0; margin-right: 10px;
         }
 
         .col-hr { 
             font-weight: 600; 
-            white-space: pre-wrap; /* 核心：保留换行显示 */
-            word-wrap: break-word;
-            overflow-wrap: break-word; 
+            white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; 
             line-height: 1.4;
+            /* 允许文本被选中编辑 */
+            user-select: text; -webkit-user-select: text;
         }
 
         .col-cn { 
-            flex: 0 0 auto; 
-            max-width: 35%; 
-            text-align: right; 
-            color: #666; 
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            flex: 0 0 auto; max-width: 35%; 
+            text-align: right; color: #666; 
+            white-space: pre-wrap; word-wrap: break-word;
             font-size: 14px;
+            user-select: text; -webkit-user-select: text;
         }
 
         .editing { 
             background: #fff !important; 
-            border-bottom: 1px solid #6366f1 !important; 
-            outline: none; 
-            min-height: 24px;
+            border-bottom: 2px solid #6366f1 !important; 
+            outline: none; min-height: 24px;
         }
 
         .icon-audio { width: 22px; height: 22px; margin-right: 10px; fill: var(--primary); flex-shrink: 0; margin-top: 2px; cursor: pointer;}
 
         .action-area {
-            flex: 0 0 30px; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            margin-left: 8px; 
-            gap: 12px;
+            flex: 0 0 40px; display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; margin-left: 8px; gap: 15px;
         }
-        .del-word-btn { color: #ddd; cursor: pointer; font-size: 16px; padding: 4px; }
+        .del-word-btn { color: #ddd; cursor: pointer; font-size: 16px; padding: 5px; }
         .del-word-btn:hover { color: var(--danger); }
         
+        /* 拖拽手柄 */
         .drag-handle {
-            color: #ccc; cursor: grab; font-size: 20px; padding: 4px;
-            touch-action: none; 
-            user-select: none;
+            color: #ccc; cursor: grab; font-size: 24px; padding: 10px 15px;
+            touch-action: none; /* 接管触摸事件 */
         }
-        .drag-handle:active { color: var(--primary); cursor: grabbing; }
+        /* 激活状态 */
+        .drag-handle.active { color: #f57f17; transform: scale(1.2); }
 
         .panel { display: none; background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
@@ -160,7 +147,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V33</h1>
+        <h1>🇭🇷 克语助手 V34</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -218,13 +205,18 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v33')) || JSON.parse(localStorage.getItem('cro_v32_2')) || JSON.parse(localStorage.getItem('cro_v32_1')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v34')) || JSON.parse(localStorage.getItem('cro_v33')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = appData.length > 0 ? 0 : -1;
     let currentMode = 'quiz';
     let challengeList = [];
     const audioPlayer = document.getElementById('audioPlayer');
+    
+    // 拖拽相关变量
     let dragEl = null;
+    let pressTimer = null;
+    let isDragActive = false;
+    let startY = 0;
 
     function render() {
         const list = document.getElementById('wordListContainer');
@@ -258,12 +250,16 @@
             const row = document.createElement('div');
             row.className = 'word-row';
             
+            // 核心修复：NFC 标准化，自动把分离的 cˇ 粘合成 č
+            const safeHr = w.hr ? w.hr.normalize('NFC') : "";
+            const safeCn = w.cn ? w.cn.normalize('NFC') : "";
+
             row.innerHTML = `
                 <div class="left-part">
-                    <span onclick="play('${w.hr.replace(/'/g, "\\'").replace(/\n/g, " ")}')">${audioIconSvg}</span>
-                    <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
+                    <span onclick="play('${safeHr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}')">${audioIconSvg}</span>
+                    <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${safeHr}</div>
                 </div>
-                <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${w.cn}</div>
+                <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${safeCn}</div>
                 <div class="action-area">
                     <div class="del-word-btn" onclick="delWord(${i})">✕</div>
                     <div class="drag-handle">≡</div>
@@ -271,24 +267,47 @@
             `;
 
             const handle = row.querySelector('.drag-handle');
+            // 绑定长按拖拽事件
             handle.addEventListener('touchstart', handleTouchStart, {passive: false});
             handle.addEventListener('touchmove', handleTouchMove, {passive: false});
             handle.addEventListener('touchend', handleTouchEnd);
-            handle.addEventListener('mousedown', handleMouseDown);
+            handle.addEventListener('touchcancel', handleTouchEnd);
             
             list.appendChild(row);
         });
     }
 
-    // --- 拖拽逻辑 ---
+    // --- 新版防误触拖拽逻辑 ---
     function handleTouchStart(e) {
-        dragEl = this.closest('.word-row');
-        dragEl.classList.add('dragging');
+        // 记录初始位置
+        startY = e.touches[0].clientY;
+        const handle = this;
+        const row = handle.closest('.word-row');
+        
+        // 开启计时器，0.8秒后激活拖拽
+        pressTimer = setTimeout(() => {
+            isDragActive = true;
+            dragEl = row;
+            dragEl.classList.add('dragging'); // 变色
+            handle.classList.add('active');   // 手柄变色
+            if(navigator.vibrate) navigator.vibrate(50); // 震动反馈
+        }, 800); 
     }
 
     function handleTouchMove(e) {
-        if (!dragEl) return;
-        e.preventDefault(); 
+        // 如果还没激活（长按时间不够），检测是否发生了移动
+        if (!isDragActive) {
+            const currentY = e.touches[0].clientY;
+            // 如果手指在等待期间移动超过10像素，说明用户想滚屏，取消长按计时
+            if (Math.abs(currentY - startY) > 10) {
+                clearTimeout(pressTimer);
+            }
+            return; 
+        }
+
+        // 激活状态下：阻止浏览器滚动，执行换位
+        if (e.cancelable) e.preventDefault();
+        
         const touch = e.touches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
         const targetRow = target ? target.closest('.word-row') : null;
@@ -296,48 +315,25 @@
         if (targetRow && targetRow !== dragEl) {
             const list = document.getElementById('wordListContainer');
             const children = Array.from(list.children);
-            if (children.indexOf(dragEl) < children.indexOf(targetRow)) {
-                list.insertBefore(dragEl, targetRow.nextSibling);
-            } else {
-                list.insertBefore(dragEl, targetRow);
-            }
+            const dragIndex = children.indexOf(dragEl);
+            const targetIndex = children.indexOf(targetRow);
+            
+            if (dragIndex < targetIndex) list.insertBefore(dragEl, targetRow.nextSibling);
+            else list.insertBefore(dragEl, targetRow);
         }
     }
 
     function handleTouchEnd(e) {
-        if (!dragEl) return;
-        dragEl.classList.remove('dragging');
-        dragEl = null;
-        rebuildDataFromDOM(); 
-    }
-
-    function handleMouseDown(e) {
-        dragEl = this.closest('.word-row');
-        dragEl.classList.add('dragging');
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    }
-    function handleMouseMove(e) {
-        if(!dragEl) return;
-        e.preventDefault();
-        const target = document.elementFromPoint(e.clientX, e.clientY);
-        const targetRow = target ? target.closest('.word-row') : null;
-        if (targetRow && targetRow !== dragEl) {
-            const list = document.getElementById('wordListContainer');
-            const children = Array.from(list.children);
-            if (children.indexOf(dragEl) < children.indexOf(targetRow)) {
-                list.insertBefore(dragEl, targetRow.nextSibling);
-            } else {
-                list.insertBefore(dragEl, targetRow);
-            }
+        clearTimeout(pressTimer); // 清除计时器
+        if (isDragActive) {
+            dragEl.classList.remove('dragging');
+            const handle = dragEl.querySelector('.drag-handle');
+            if(handle) handle.classList.remove('active');
+            rebuildDataFromDOM();
         }
-    }
-    function handleMouseUp() {
-        if(dragEl) dragEl.classList.remove('dragging');
+        // 重置状态
+        isDragActive = false;
         dragEl = null;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        rebuildDataFromDOM();
     }
 
     function rebuildDataFromDOM() {
@@ -367,9 +363,11 @@
     }
 
     function updateWord(idx, field, val) {
-        appData[currentUnitIdx].words[idx][field] = val;
+        // 保存时也进行一次标准化
+        const cleanVal = val.normalize('NFC');
+        appData[currentUnitIdx].words[idx][field] = cleanVal;
         if(appData[currentUnitIdx].name === "📕 错题本") {
-            if(notebook[idx]) notebook[idx][field] = val;
+            if(notebook[idx]) notebook[idx][field] = cleanVal;
             localStorage.setItem('cro_notebook', JSON.stringify(notebook));
         }
         saveData();
@@ -385,9 +383,10 @@
         if(!text) return;
         let targetUnitIndex = -1;
         if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
+        // 导入时标准化
         const newWords = text.split('\n').map(l => { 
             let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); 
-            return i!==-1 ? {hr:l.slice(0,i).trim(), cn:l.slice(i).replace(/^[,;，；\s]+/,"").trim()} : {hr:l.trim(), cn:""}; 
+            return i!==-1 ? {hr:l.slice(0,i).trim().normalize('NFC'), cn:l.slice(i).replace(/^[,;，；\s]+/,"").trim().normalize('NFC')} : {hr:l.trim().normalize('NFC'), cn:""}; 
         }).filter(w => w.hr);
         if (targetUnitIndex !== -1) {
             const unit = appData[targetUnitIndex];
@@ -407,7 +406,6 @@
 
     function play(t) { 
         if(!t || t.trim() === '') return; 
-        // 关键修复：发音前把换行符替换成空格，防止断句错误
         const cleanText = t.replace(/[\r\n]+/g, " ");
         audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=hr&client=gtx`; 
         audioPlayer.play().catch(e => { console.log('Blocked', e); }); 
@@ -482,7 +480,7 @@
 
     function addToNotebook(word) { if(!notebook.some(w => w.hr === word.hr)) { notebook.push(word); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); } }
     function removeDuplicates() { if(!confirm('确定清理重复？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
-    function saveData() { localStorage.setItem('cro_v33', JSON.stringify(appData)); }
+    function saveData() { localStorage.setItem('cro_v34', JSON.stringify(appData)); }
     function delWord(i) { if(confirm('删除？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook.splice(i,1); localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
     function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook=[]; localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); }}
     function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
