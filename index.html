@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V34.1 (显示完美修复版)</title>
+    <title>克语助手 V35 (全平台完美版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -19,7 +19,7 @@
             color: #333; 
             overscroll-behavior-y: contain; 
             -webkit-tap-highlight-color: transparent;
-            -webkit-user-select: none; user-select: none;
+            /* 允许文本选择，但在拖拽把手处禁用 */
         }
 
         .sticky-header {
@@ -69,14 +69,14 @@
             margin-bottom: 10px; align-items: center; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.02);
             position: relative;
-            transition: transform 0.2s, background-color 0.2s;
+            transition: transform 0.1s, background-color 0.2s;
         }
         
         .word-row.dragging {
             background: var(--drag-bg);
             box-shadow: 0 10px 20px rgba(0,0,0,0.15);
             z-index: 100;
-            transform: scale(1.03);
+            transform: scale(1.02);
             border: 1px solid #ffe082;
         }
 
@@ -88,7 +88,6 @@
             font-weight: 600; 
             white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; 
             line-height: 1.4;
-            user-select: text; -webkit-user-select: text;
         }
 
         .col-cn { 
@@ -96,7 +95,6 @@
             text-align: right; color: #666; 
             white-space: pre-wrap; word-wrap: break-word;
             font-size: 14px;
-            user-select: text; -webkit-user-select: text;
         }
 
         .editing { 
@@ -114,11 +112,12 @@
         .del-word-btn { color: #ddd; cursor: pointer; font-size: 16px; padding: 5px; }
         .del-word-btn:hover { color: var(--danger); }
         
+        /* 拖拽手柄 */
         .drag-handle {
             color: #ccc; cursor: grab; font-size: 24px; padding: 10px 15px;
-            touch-action: none; 
+            touch-action: none; user-select: none; /* 关键：禁止选手柄 */
         }
-        .drag-handle.active { color: #f57f17; transform: scale(1.2); }
+        .drag-handle.active { color: #f57f17; transform: scale(1.2); cursor: grabbing; }
 
         .panel { display: none; background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
@@ -142,7 +141,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V34.1</h1>
+        <h1>🇭🇷 克语助手 V35</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -200,7 +199,7 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v34_1')) || JSON.parse(localStorage.getItem('cro_v34')) || JSON.parse(localStorage.getItem('cro_v33')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v35')) || JSON.parse(localStorage.getItem('cro_v34_1')) || JSON.parse(localStorage.getItem('cro_v34')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = appData.length > 0 ? 0 : -1;
     let currentMode = 'quiz';
@@ -212,14 +211,10 @@
     let isDragActive = false;
     let startY = 0;
 
-    // --- 核心修复：强力文字胶水 ---
-    // 这个函数会强制把分离的符号粘合在一起
+    // --- 强力文字胶水 ---
     function fixCroText(text) {
         if (!text) return "";
-        // 1. 标准化 NFC (解决大部分分离问题)
         let t = text.normalize('NFC');
-        // 2. 强力胶水：手动修复顽固的分离字符 (防止特殊字体或输入法造成的分离)
-        // 比如将 "c" + "ˇ" 强行替换为 "č"
         t = t.replace(/c\s*ˇ/g, "č").replace(/C\s*ˇ/g, "Č");
         t = t.replace(/s\s*ˇ/g, "š").replace(/S\s*ˇ/g, "Š");
         t = t.replace(/z\s*ˇ/g, "ž").replace(/Z\s*ˇ/g, "Ž");
@@ -258,7 +253,6 @@
             const row = document.createElement('div');
             row.className = 'word-row';
             
-            // 在显示时应用“胶水修复”
             const safeHr = fixCroText(w.hr);
             const safeCn = fixCroText(w.cn);
 
@@ -275,16 +269,21 @@
             `;
 
             const handle = row.querySelector('.drag-handle');
+            
+            // 📱 手机/iPad：绑定触摸事件 (长按逻辑)
             handle.addEventListener('touchstart', handleTouchStart, {passive: false});
             handle.addEventListener('touchmove', handleTouchMove, {passive: false});
             handle.addEventListener('touchend', handleTouchEnd);
             handle.addEventListener('touchcancel', handleTouchEnd);
             
+            // 💻 电脑/鼠标：绑定鼠标事件 (直接拖动逻辑)
+            handle.addEventListener('mousedown', handleMouseDown);
+            
             list.appendChild(row);
         });
     }
 
-    // --- 防误触拖拽逻辑 (保持 V34 逻辑) ---
+    // --- 📱 触摸屏拖拽 (长按防误触) ---
     function handleTouchStart(e) {
         startY = e.touches[0].clientY;
         const handle = this;
@@ -305,9 +304,46 @@
             return; 
         }
         if (e.cancelable) e.preventDefault();
+        performDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }
+
+    function handleTouchEnd(e) {
+        clearTimeout(pressTimer);
+        if (isDragActive) {
+            stopDragging();
+        }
+        isDragActive = false;
+    }
+
+    // --- 💻 鼠标拖拽 (按住即拖) ---
+    function handleMouseDown(e) {
+        // 鼠标按下立即开始，不等待
+        dragEl = this.closest('.word-row');
+        isDragActive = true;
+        dragEl.classList.add('dragging');
+        this.classList.add('active');
         
-        const touch = e.touches[0];
-        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        // 监听全局移动和松开
+        document.addEventListener('mousemove', handleMouseMoveGlobal);
+        document.addEventListener('mouseup', handleMouseUpGlobal);
+        e.preventDefault(); // 防止选中文本
+    }
+
+    function handleMouseMoveGlobal(e) {
+        if (!isDragActive) return;
+        e.preventDefault();
+        performDrag(e.clientX, e.clientY);
+    }
+
+    function handleMouseUpGlobal(e) {
+        stopDragging();
+        document.removeEventListener('mousemove', handleMouseMoveGlobal);
+        document.removeEventListener('mouseup', handleMouseUpGlobal);
+    }
+
+    // --- 通用拖拽核心逻辑 ---
+    function performDrag(x, y) {
+        const target = document.elementFromPoint(x, y);
         const targetRow = target ? target.closest('.word-row') : null;
 
         if (targetRow && targetRow !== dragEl) {
@@ -315,14 +351,14 @@
             const children = Array.from(list.children);
             const dragIndex = children.indexOf(dragEl);
             const targetIndex = children.indexOf(targetRow);
+            
             if (dragIndex < targetIndex) list.insertBefore(dragEl, targetRow.nextSibling);
             else list.insertBefore(dragEl, targetRow);
         }
     }
 
-    function handleTouchEnd(e) {
-        clearTimeout(pressTimer);
-        if (isDragActive) {
+    function stopDragging() {
+        if(dragEl) {
             dragEl.classList.remove('dragging');
             const handle = dragEl.querySelector('.drag-handle');
             if(handle) handle.classList.remove('active');
@@ -345,6 +381,7 @@
         render(); 
     }
 
+    // --- 其他功能 ---
     function enableEdit(el, idx, field) {
         el.contentEditable = true; el.focus(); el.classList.add('editing'); el.onkeydown = null; 
         el.onblur = () => {
@@ -354,7 +391,6 @@
     }
 
     function updateWord(idx, field, val) {
-        // 保存时也修复一下
         const cleanVal = fixCroText(val);
         appData[currentUnitIdx].words[idx][field] = cleanVal;
         if(appData[currentUnitIdx].name === "📕 错题本") {
@@ -374,7 +410,6 @@
         let targetUnitIndex = -1;
         if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
         
-        // 导入时修复文字
         const newWords = text.split('\n').map(l => { 
             let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); 
             return i!==-1 ? {hr:fixCroText(l.slice(0,i).trim()), cn:fixCroText(l.slice(i).replace(/^[,;，；\s]+/,"").trim())} : {hr:fixCroText(l.trim()), cn:""}; 
@@ -395,7 +430,6 @@
         saveData(); render(); togglePanel('importPanel'); document.getElementById('importText').value = ''; 
     }
 
-    // 播放时也去掉换行符
     function play(t) { 
         if(!t || t.trim() === '') return; 
         const cleanText = t.replace(/[\r\n]+/g, " ");
@@ -447,14 +481,13 @@
     }
     function addToNotebook(word) { if(!notebook.some(w => w.hr === word.hr)) { notebook.push(word); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); } }
     function removeDuplicates() { if(!confirm('确定清理重复？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
-    function saveData() { localStorage.setItem('cro_v34_1', JSON.stringify(appData)); }
+    function saveData() { localStorage.setItem('cro_v35', JSON.stringify(appData)); }
     function delWord(i) { if(confirm('删除？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook.splice(i,1); localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
     function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook=[]; localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); }}
     function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
     function goToNotebook() { if(notebook.length===0) return alert('空'); const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); currentUnitIdx=0; render(); }
     function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); }
     function downloadAll() { const b=new Blob([JSON.stringify(appData,null,2)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`cro_backup.json`; a.click(); }
-    // 导入文件时应用修复
     function handleFileImport(i) { const r=new FileReader(); r.onload=(e)=>{ appData=[...JSON.parse(e.target.result),...appData]; saveData(); render(); }; r.readAsText(i.files[0]); }
     function importFromCode() { try { appData=[...JSON.parse(document.getElementById('codeText').value),...appData]; saveData(); render(); alert('成功'); } catch(e){alert('错误');} }
     
