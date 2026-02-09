@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V32.2 (修复显示版)</title>
+    <title>克语助手 V33 (换行发音修复版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -62,20 +62,19 @@
             color: white; border: none; font-size: 18px; font-weight: bold; cursor: pointer;
         }
 
-        /* --- 列表布局修复 --- */
+        /* --- 列表布局 --- */
         .word-row {
             display: flex; 
             padding: 16px; 
             background: white; 
             border-radius: 12px;
             margin-bottom: 10px; 
-            align-items: center; /* 默认垂直居中 */
+            align-items: center; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.02);
             position: relative;
             transition: transform 0.1s, box-shadow 0.1s;
         }
         
-        /* 拖拽时的样式 */
         .word-row.dragging {
             opacity: 0.9;
             background: var(--drag-bg);
@@ -85,28 +84,25 @@
             border: 2px solid #6366f1;
         }
 
-        /* 左侧容器：包含喇叭和克语 */
         .left-part {
-            flex: 1; /* 占据剩余空间 */
+            flex: 1; 
             display: flex;
-            align-items: flex-start; /* 顶部对齐，适应多行 */
-            min-width: 0; /* 关键：防止 flex 子项溢出 */
+            align-items: flex-start; 
+            min-width: 0; 
             margin-right: 10px;
         }
 
-        /* 关键修复：CSS 换行规则 */
         .col-hr { 
             font-weight: 600; 
-            white-space: pre-wrap; /* 允许识别回车键 */
-            word-wrap: break-word; /* 正常换行 */
-            overflow-wrap: break-word; /* 防止长单词撑开 */
+            white-space: pre-wrap; /* 核心：保留换行显示 */
+            word-wrap: break-word;
+            overflow-wrap: break-word; 
             line-height: 1.4;
         }
 
-        /* 中文列 */
         .col-cn { 
-            flex: 0 0 auto; /* 不放大也不缩小 */
-            max-width: 35%; /* 最大宽度 */
+            flex: 0 0 auto; 
+            max-width: 35%; 
             text-align: right; 
             color: #666; 
             white-space: pre-wrap;
@@ -123,9 +119,8 @@
 
         .icon-audio { width: 22px; height: 22px; margin-right: 10px; fill: var(--primary); flex-shrink: 0; margin-top: 2px; cursor: pointer;}
 
-        /* 操作区：删除 + 拖拽手柄 */
         .action-area {
-            flex: 0 0 30px; /* 固定宽度 */
+            flex: 0 0 30px; 
             display: flex; 
             flex-direction: column; 
             align-items: center; 
@@ -136,7 +131,6 @@
         .del-word-btn { color: #ddd; cursor: pointer; font-size: 16px; padding: 4px; }
         .del-word-btn:hover { color: var(--danger); }
         
-        /* 拖拽手柄图标 */
         .drag-handle {
             color: #ccc; cursor: grab; font-size: 20px; padding: 4px;
             touch-action: none; 
@@ -144,7 +138,6 @@
         }
         .drag-handle:active { color: var(--primary); cursor: grabbing; }
 
-        /* 面板样式 */
         .panel { display: none; background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
         .footer-del-btn { width: 100%; padding: 15px; background: #fff; border: 2px solid #ffebeb; color: var(--danger); border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 30px; }
@@ -167,7 +160,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V32.2</h1>
+        <h1>🇭🇷 克语助手 V33</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -225,7 +218,7 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v32_2')) || JSON.parse(localStorage.getItem('cro_v32_1')) || JSON.parse(localStorage.getItem('cro_v32')) || JSON.parse(localStorage.getItem('cro_v31')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v33')) || JSON.parse(localStorage.getItem('cro_v32_2')) || JSON.parse(localStorage.getItem('cro_v32_1')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = appData.length > 0 ? 0 : -1;
     let currentMode = 'quiz';
@@ -267,7 +260,7 @@
             
             row.innerHTML = `
                 <div class="left-part">
-                    <span onclick="play('${w.hr.replace(/'/g, "\\'")}')">${audioIconSvg}</span>
+                    <span onclick="play('${w.hr.replace(/'/g, "\\'").replace(/\n/g, " ")}')">${audioIconSvg}</span>
                     <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
                 </div>
                 <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${w.cn}</div>
@@ -414,7 +407,9 @@
 
     function play(t) { 
         if(!t || t.trim() === '') return; 
-        audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(t)}&tl=hr&client=gtx`; 
+        // 关键修复：发音前把换行符替换成空格，防止断句错误
+        const cleanText = t.replace(/[\r\n]+/g, " ");
+        audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=hr&client=gtx`; 
         audioPlayer.play().catch(e => { console.log('Blocked', e); }); 
     }
 
@@ -487,7 +482,7 @@
 
     function addToNotebook(word) { if(!notebook.some(w => w.hr === word.hr)) { notebook.push(word); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); } }
     function removeDuplicates() { if(!confirm('确定清理重复？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
-    function saveData() { localStorage.setItem('cro_v32_2', JSON.stringify(appData)); }
+    function saveData() { localStorage.setItem('cro_v33', JSON.stringify(appData)); }
     function delWord(i) { if(confirm('删除？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook.splice(i,1); localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
     function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook=[]; localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); }}
     function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
