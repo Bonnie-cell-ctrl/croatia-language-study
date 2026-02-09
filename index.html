@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V36 (听写模式版)</title>
+    <title>克语助手 V37 (智能判卷版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -19,7 +19,6 @@
             color: #333; 
             overscroll-behavior-y: contain; 
             -webkit-tap-highlight-color: transparent;
-            /* 允许文本选择 */
         }
 
         .sticky-header {
@@ -51,7 +50,6 @@
             background: white; padding: 20px; border-radius: 20px; margin-bottom: 20px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
         }
-        /* 模式选择器改为3列 */
         .mode-selector { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 5px; }
         .mode-btn { 
             padding: 10px; border-radius: 12px; border: 1px solid #eee; font-size: 13px; cursor: pointer;
@@ -65,7 +63,6 @@
             color: white; border: none; font-size: 18px; font-weight: bold; cursor: pointer;
         }
 
-        /* 列表样式 */
         .word-row {
             display: flex; padding: 16px; background: white; border-radius: 12px;
             margin-bottom: 10px; align-items: center; 
@@ -102,17 +99,15 @@
         .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
         .footer-del-btn { width: 100%; padding: 15px; background: #fff; border: 2px solid #ffebeb; color: var(--danger); border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 30px; }
         
-        /* 挑战界面通用 */
         #challengeOverlay { display: none; position: fixed; inset: 0; background: white; z-index: 2000; flex-direction: column; padding-top: env(safe-area-inset-top); }
         .challenge-header { display:flex; justify-content: space-between; padding:20px; border-bottom:1px solid #eee; align-items: center;}
         .challenge-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;}
         
-        /* 1. 选择题样式 */
+        /* 挑战模式样式 */
         .quiz-option { width: 100%; max-width: 400px; padding: 18px; margin-bottom: 12px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; cursor: pointer; font-size: 16px;}
         .quiz-option.correct { background: var(--success); color: white; border-color: var(--success); }
         .quiz-option.wrong { background: var(--danger); color: white; border-color: var(--danger); }
         
-        /* 2. 连连看样式 */
         .match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 450px; }
         .match-item { padding: 22px 10px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; background: #fff; font-size: 15px; transition: all 0.2s; cursor: pointer; font-weight: 500; display: flex; align-items: center; justify-content: center; word-break: break-word; }
         .match-item.selected { border-color: #6366f1; background: #f5f3ff; }
@@ -120,7 +115,6 @@
         .match-item.match-wrong { background: var(--danger) !important; color: white !important; border-color: var(--danger) !important; }
         .match-item.hidden { visibility: hidden; pointer-events: none; }
 
-        /* 3. 拼写模式样式 (新) */
         .spelling-container { width: 100%; max-width: 400px; text-align: center; }
         .spelling-input { 
             width: 100%; padding: 15px; font-size: 20px; text-align: center; 
@@ -144,7 +138,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V36</h1>
+        <h1>🇭🇷 克语助手 V37</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -203,19 +197,14 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v36')) || JSON.parse(localStorage.getItem('cro_v35')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v37')) || JSON.parse(localStorage.getItem('cro_v36')) || JSON.parse(localStorage.getItem('cro_v35')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = appData.length > 0 ? 0 : -1;
     let currentMode = 'quiz';
     let challengeList = [];
     const audioPlayer = document.getElementById('audioPlayer');
     
-    let dragEl = null;
-    let pressTimer = null;
-    let isDragActive = false;
-    let startY = 0;
-    
-    // 拼写模式变量
+    let dragEl = null; let pressTimer = null; let isDragActive = false; let startY = 0;
     let spellingAttempts = 0;
 
     function fixCroText(text) {
@@ -274,7 +263,7 @@
         });
     }
 
-    // --- 拖拽功能 (保持 V35) ---
+    // --- 拖拽功能 (全平台) ---
     function handleTouchStart(e) {
         startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row');
         pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); 
@@ -322,7 +311,6 @@
         document.getElementById('mode-spell').classList.toggle('active', mode === 'spell'); 
     }
 
-    // --- 挑战逻辑 (含拼写模式) ---
     function startChallenge() {
         const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return;
         play(' '); let base = [...unit.words]; let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25));
@@ -334,7 +322,6 @@
         const main = document.getElementById('challengeMain'); main.innerHTML = ''; document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
         const current = challengeList[0];
         
-        // 播放声音 (所有模式)
         if(document.getElementById('autoVoice').checked) play(current.hr);
 
         if(currentMode === 'quiz') {
@@ -384,47 +371,39 @@
                     <div style="margin-top:20px; color:#666; font-size:14px" onclick="play('${current.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}')">🔊 重听</div>
                 </div>
             `;
-            const input = document.getElementById('spellInput');
-            input.focus();
+            const input = document.getElementById('spellInput'); input.focus();
             input.onkeydown = (e) => { if(e.key === 'Enter') checkSpelling(); };
         }
     }
 
-    // --- 拼写模式核心逻辑 ---
-    function typeChar(char) {
-        const input = document.getElementById('spellInput');
-        input.value += char;
-        input.focus();
-    }
+    function typeChar(char) { const input = document.getElementById('spellInput'); input.value += char; input.focus(); }
 
     function checkSpelling() {
-        const input = document.getElementById('spellInput');
-        const feedback = document.getElementById('spellFeedback');
-        const current = challengeList[0];
+        const input = document.getElementById('spellInput'); const feedback = document.getElementById('spellFeedback'); const current = challengeList[0];
         
-        const userVal = input.value.trim().toLowerCase().replace(/\s+/g, ' ');
-        // 移除标点符号进行宽容比较 (可选，这里只比较清理后的文本)
-        const targetVal = current.hr.trim().toLowerCase().replace(/[\r\n]+/g, " ").replace(/\s+/g, ' ');
+        // --- 智能判卷清洗逻辑 ---
+        const clean = (str) => {
+            return str.normalize('NFC').toLowerCase()
+                      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, " ") // 将标点变为空格
+                      .replace(/\s+/g, " ") // 合并多余空格
+                      .trim();
+        };
+
+        const userVal = clean(input.value);
+        const targetVal = clean(current.hr);
 
         if (userVal === targetVal) {
-            input.classList.add('success');
-            feedback.style.color = 'var(--success)';
-            feedback.innerText = "正确! ✅";
-            // 1秒后下一题
+            input.classList.add('success'); feedback.style.color = 'var(--success)'; feedback.innerText = "正确! ✅";
             setTimeout(() => { challengeList.shift(); showQuestion(); }, 1000);
         } else {
-            input.classList.add('error');
-            feedback.style.color = 'var(--danger)';
-            feedback.innerText = `错误! 正确答案: ${current.hr}`;
-            addToNotebook(current);
-            // 错误停留，等待用户看清
-            setTimeout(() => { input.classList.remove('error'); }, 2000);
+            input.classList.add('error'); feedback.style.color = 'var(--danger)'; feedback.innerText = `错误! 答案: ${current.hr}`;
+            addToNotebook(current); setTimeout(() => { input.classList.remove('error'); }, 2000);
         }
     }
 
     function addToNotebook(word) { if(!notebook.some(w => w.hr === word.hr)) { notebook.push(word); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } if(currentMode === 'quiz') { challengeList.push(challengeList.shift()); showQuestion(); } }
     function removeDuplicates() { if(!confirm('确定清理重复？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
-    function saveData() { localStorage.setItem('cro_v36', JSON.stringify(appData)); }
+    function saveData() { localStorage.setItem('cro_v37', JSON.stringify(appData)); }
     function delWord(i) { if(confirm('删除？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook.splice(i,1); localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
     function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { if(appData[currentUnitIdx].name==="📕 错题本") { notebook=[]; localStorage.setItem('cro_notebook',JSON.stringify(notebook)); } appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); }}
     function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
