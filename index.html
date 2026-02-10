@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V40 (完美记忆版)</title>
+    <title>克语助手 V41 (全能混合版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -51,9 +51,10 @@
             background: white; padding: 20px; border-radius: 20px; margin-bottom: 20px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
         }
-        .mode-selector { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 5px; }
+        /* V41: 改为4列布局，容纳混合模式 */
+        .mode-selector { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 5px; }
         .mode-btn { 
-            padding: 10px; border-radius: 12px; border: 1px solid #eee; font-size: 13px; cursor: pointer;
+            padding: 10px 4px; border-radius: 10px; border: 1px solid #eee; font-size: 13px; cursor: pointer;
             background: #f9f9f9; font-weight: 600; color: #666; transition: all 0.2s;
             display: flex; align-items: center; justify-content: center;
         }
@@ -136,7 +137,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V40</h1>
+        <h1>🇭🇷 克语助手 V41</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -153,6 +154,7 @@
             <div class="mode-btn active" id="mode-quiz" onclick="setMode('quiz')">选择</div>
             <div class="mode-btn" id="mode-match" onclick="setMode('match')">连连看</div>
             <div class="mode-btn" id="mode-spell" onclick="setMode('spell')">拼写</div>
+            <div class="mode-btn" id="mode-mixed" onclick="setMode('mixed')">混合</div>
         </div>
         <button class="start-btn" onclick="startChallenge()">开始挑战</button>
     </div>
@@ -196,10 +198,9 @@
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
     // 数据加载逻辑
-    let appData = JSON.parse(localStorage.getItem('cro_v40')) || JSON.parse(localStorage.getItem('cro_v39')) || JSON.parse(localStorage.getItem('cro_v38')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v41')) || JSON.parse(localStorage.getItem('cro_v40')) || JSON.parse(localStorage.getItem('cro_v39')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     
-    // 进度记忆逻辑
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
 
@@ -228,7 +229,6 @@
         if (appData.length === 0) { nameInput.placeholder = "单元名称"; list.innerHTML = '<div style="text-align:center;color:#999;padding:40px">暂无单词</div>'; return; }
         
         appData.forEach((u, i) => {
-            // 幽灵模式：平时隐藏错题本，只有当我们在错题本里时才显示
             if (u.name !== "📕 错题本" || i === currentUnitIdx) {
                 select.add(new Option(u.name, i));
             }
@@ -267,45 +267,19 @@
         });
     }
 
-    // --- V40 核心修复：更新书签状态 ---
-    function jumpToUnit() {
-        currentUnitIdx = parseInt(document.getElementById('unitSelect').value);
-        exitNotebookMode(); // 只要手动跳转，就一定不是错题本模式了
-        saveState(); render();
-    }
-
-    function changeUnit(dir) { 
-        let n = currentUnitIdx + dir; 
-        if(n >= 0 && n < appData.length) { 
-            currentUnitIdx = n; 
-            exitNotebookMode(); // 切页也退出错题本模式
-            saveState(); render(); 
-        } 
-    }
-
+    function jumpToUnit() { currentUnitIdx = parseInt(document.getElementById('unitSelect').value); exitNotebookMode(); saveState(); render(); }
+    function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; exitNotebookMode(); saveState(); render(); } }
     function goToNotebook() { 
         if(notebook.length===0) return alert('错题本是空的'); 
-        
-        // 标记我们正在看错题本
         localStorage.setItem('cro_viewing_notebook', 'true');
-        
-        const name="📕 错题本"; 
-        const idx=appData.findIndex(u=>u.name===name); 
-        if(idx>-1) appData[idx].words=notebook; 
-        else appData.unshift({name, words:notebook}); 
-        
-        currentUnitIdx = (idx > -1) ? idx : 0; 
-        saveState(); render(); 
+        const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); 
+        if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); 
+        currentUnitIdx = (idx > -1) ? idx : 0; saveState(); render(); 
     }
-
-    function exitNotebookMode() {
-        localStorage.setItem('cro_viewing_notebook', 'false');
-    }
-
+    function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function saveData() { localStorage.setItem('cro_v40', JSON.stringify(appData)); saveState(); }
+    function saveData() { localStorage.setItem('cro_v41', JSON.stringify(appData)); saveState(); }
 
-    // --- 拖拽功能 ---
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
     function handleTouchEnd(e) { clearTimeout(pressTimer); if (isDragActive) stopDragging(); isDragActive = false; }
@@ -316,7 +290,6 @@
     function stopDragging() { if(dragEl) { dragEl.classList.remove('dragging'); const handle = dragEl.querySelector('.drag-handle'); if(handle) handle.classList.remove('active'); rebuildDataFromDOM(); } isDragActive = false; dragEl = null; }
     function rebuildDataFromDOM() { const rows = document.querySelectorAll('.word-row'); const newWords = []; rows.forEach(row => { newWords.push({hr: row.querySelector('.col-hr').innerText, cn: row.querySelector('.col-cn').innerText}); }); appData[currentUnitIdx].words = newWords; saveData(); render(); }
 
-    // --- 基础功能 ---
     function enableEdit(el, idx, field) { el.contentEditable = true; el.focus(); el.classList.add('editing'); el.onkeydown = null; el.onblur = () => { el.contentEditable = false; el.classList.remove('editing'); updateWord(idx, field, el.innerText); }; }
     function updateWord(idx, field, val) { const cleanVal = fixCroText(val); appData[currentUnitIdx].words[idx][field] = cleanVal; if(appData[currentUnitIdx].name === "📕 错题本") { if(notebook[idx]) notebook[idx][field] = cleanVal; localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } saveData(); }
     function importWords() {
@@ -328,11 +301,11 @@
         saveData(); render(); togglePanel('importPanel'); document.getElementById('importText').value = ''; 
     }
     function play(t) { if(!t || t.trim() === '') return; const cleanText = t.replace(/[\r\n]+/g, " "); audioPlayer.src=`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=hr&client=gtx`; audioPlayer.play().catch(e => { console.log('Blocked', e); }); }
+    
     function setMode(mode) { 
         currentMode = mode; 
-        document.getElementById('mode-quiz').classList.toggle('active', mode === 'quiz'); 
-        document.getElementById('mode-match').classList.toggle('active', mode === 'match'); 
-        document.getElementById('mode-spell').classList.toggle('active', mode === 'spell'); 
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('mode-' + mode).classList.add('active');
     }
 
     function startChallenge() {
@@ -348,7 +321,18 @@
         
         if(document.getElementById('autoVoice').checked) play(current.hr);
 
-        if(currentMode === 'quiz') {
+        // --- V41 混合模式逻辑 ---
+        let displayMode = currentMode;
+        if (currentMode === 'mixed') {
+            // 混合策略：随机选择 Quiz, Spell, Match
+            const r = Math.random();
+            // 如果单词够4个，有30%概率出连连看；否则只出Quiz和Spell
+            if (challengeList.length >= 4 && r < 0.3) displayMode = 'match';
+            else if (r < 0.65) displayMode = 'quiz';
+            else displayMode = 'spell';
+        }
+
+        if(displayMode === 'quiz') {
             main.innerHTML = `<div style="font-size:28px; margin-bottom:30px; font-weight:bold; color:#6366f1; text-align:center; white-space: pre-wrap">${current.hr}</div>`;
             const options = [current]; const all = appData[currentUnitIdx].words;
             while(options.length < Math.min(all.length, 4)) { const r = all[Math.floor(Math.random() * all.length)]; if(!options.includes(r)) options.push(r); }
@@ -357,7 +341,7 @@
                 btn.onclick = () => { if(opt === current) { btn.classList.add('correct'); setTimeout(() => { challengeList.shift(); showQuestion(); }, 500); } else { btn.classList.add('wrong'); addToNotebook(current); } }; main.appendChild(btn);
             });
         } 
-        else if (currentMode === 'match') {
+        else if (displayMode === 'match') {
             const num = Math.min(challengeList.length, 4); const currentBatch = challengeList.slice(0, num);
             const items = [...currentBatch.map(s => ({t: s.hr, id: s.hr, type:'hr'})), ...currentBatch.map(s => ({t: s.cn, id: s.hr, type:'cn'}))].sort(() => Math.random() - 0.5);
             main.innerHTML = `<div class="match-grid"></div>`; const grid = main.querySelector('.match-grid'); let first = null; let matchedCount = 0;
@@ -379,7 +363,7 @@
                 }; grid.appendChild(div);
             });
         }
-        else if (currentMode === 'spell') {
+        else if (displayMode === 'spell') {
             main.innerHTML = `
                 <div class="spelling-container">
                     <div style="font-size:24px; color:#333; margin-bottom:20px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div>
@@ -417,7 +401,7 @@
     function importFromCode() { try { appData=[...JSON.parse(document.getElementById('codeText').value),...appData]; saveData(); render(); alert('成功'); } catch(e){alert('错误');} }
     function exitChallenge() { document.getElementById('challengeOverlay').style.display='none'; }
     
-    // 初始化逻辑：如果上次是在看错题本，这次回来自动打开
+    // 初始化逻辑
     if (localStorage.getItem('cro_viewing_notebook') === 'true') {
         goToNotebook();
     } else {
