@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V39 (状态优化版)</title>
+    <title>克语助手 V40 (完美记忆版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -38,7 +38,7 @@
         select { 
             flex: 1; padding: 10px; border: 1px solid #e1e4e8; border-radius: 10px; 
             font-size: 15px; text-align: center; text-align-last: center; background: white;
-            color: #333; font-weight: 600; /* 加粗一点，显示更清晰 */
+            color: #333; font-weight: 600; 
         }
         .notebook-btn {
             width: 25%; background: #eef2ff; color: #4f46e5; border: 1px solid #e0e7ff;
@@ -136,7 +136,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V39</h1>
+        <h1>🇭🇷 克语助手 V40</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -196,10 +196,10 @@
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
     // 数据加载逻辑
-    let appData = JSON.parse(localStorage.getItem('cro_v39')) || JSON.parse(localStorage.getItem('cro_v38')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v40')) || JSON.parse(localStorage.getItem('cro_v39')) || JSON.parse(localStorage.getItem('cro_v38')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     
-    // 记忆进度
+    // 进度记忆逻辑
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
 
@@ -227,20 +227,15 @@
 
         if (appData.length === 0) { nameInput.placeholder = "单元名称"; list.innerHTML = '<div style="text-align:center;color:#999;padding:40px">暂无单词</div>'; return; }
         
-        // --- V39 优化：幽灵模式下拉菜单 ---
         appData.forEach((u, i) => {
-            // 规则：
-            // 1. 普通单元：正常显示
-            // 2. 错题本：平时不显示，只有当 currentUnitIdx 正好也是错题本时，才显示 (为了让标题栏有字)
+            // 幽灵模式：平时隐藏错题本，只有当我们在错题本里时才显示
             if (u.name !== "📕 错题本" || i === currentUnitIdx) {
                 select.add(new Option(u.name, i));
             }
             insertSelect.add(new Option(`在 ${u.name} 后`, i));
         });
 
-        // 确保下拉菜单的选中状态正确
         select.value = currentUnitIdx; 
-        
         if(currentUnitIdx !== -1 && appData[currentUnitIdx]) { nameInput.placeholder = `留空则添加到: ${appData[currentUnitIdx].name}`; }
 
         const unit = appData[currentUnitIdx];
@@ -272,8 +267,10 @@
         });
     }
 
+    // --- V40 核心修复：更新书签状态 ---
     function jumpToUnit() {
         currentUnitIdx = parseInt(document.getElementById('unitSelect').value);
+        exitNotebookMode(); // 只要手动跳转，就一定不是错题本模式了
         saveState(); render();
     }
 
@@ -281,22 +278,32 @@
         let n = currentUnitIdx + dir; 
         if(n >= 0 && n < appData.length) { 
             currentUnitIdx = n; 
+            exitNotebookMode(); // 切页也退出错题本模式
             saveState(); render(); 
         } 
     }
 
     function goToNotebook() { 
         if(notebook.length===0) return alert('错题本是空的'); 
+        
+        // 标记我们正在看错题本
+        localStorage.setItem('cro_viewing_notebook', 'true');
+        
         const name="📕 错题本"; 
         const idx=appData.findIndex(u=>u.name===name); 
         if(idx>-1) appData[idx].words=notebook; 
         else appData.unshift({name, words:notebook}); 
+        
         currentUnitIdx = (idx > -1) ? idx : 0; 
         saveState(); render(); 
     }
 
+    function exitNotebookMode() {
+        localStorage.setItem('cro_viewing_notebook', 'false');
+    }
+
     function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function saveData() { localStorage.setItem('cro_v39', JSON.stringify(appData)); saveState(); }
+    function saveData() { localStorage.setItem('cro_v40', JSON.stringify(appData)); saveState(); }
 
     // --- 拖拽功能 ---
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
@@ -410,7 +417,12 @@
     function importFromCode() { try { appData=[...JSON.parse(document.getElementById('codeText').value),...appData]; saveData(); render(); alert('成功'); } catch(e){alert('错误');} }
     function exitChallenge() { document.getElementById('challengeOverlay').style.display='none'; }
     
-    render();
+    // 初始化逻辑：如果上次是在看错题本，这次回来自动打开
+    if (localStorage.getItem('cro_viewing_notebook') === 'true') {
+        goToNotebook();
+    } else {
+        render();
+    }
 </script>
 </body>
 </html>
