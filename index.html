@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V38 (记忆进度版)</title>
+    <title>克语助手 V39 (状态优化版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -38,8 +38,7 @@
         select { 
             flex: 1; padding: 10px; border: 1px solid #e1e4e8; border-radius: 10px; 
             font-size: 15px; text-align: center; text-align-last: center; background: white;
-            /* 确保下拉菜单文字居中且易读 */
-            color: #333; font-weight: 500;
+            color: #333; font-weight: 600; /* 加粗一点，显示更清晰 */
         }
         .notebook-btn {
             width: 25%; background: #eef2ff; color: #4f46e5; border: 1px solid #e0e7ff;
@@ -101,7 +100,6 @@
         .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
         .footer-del-btn { width: 100%; padding: 15px; background: #fff; border: 2px solid #ffebeb; color: var(--danger); border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 30px; }
         
-        /* 挑战模式 */
         #challengeOverlay { display: none; position: fixed; inset: 0; background: white; z-index: 2000; flex-direction: column; padding-top: env(safe-area-inset-top); }
         .challenge-header { display:flex; justify-content: space-between; padding:20px; border-bottom:1px solid #eee; align-items: center;}
         .challenge-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;}
@@ -138,7 +136,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V38</h1>
+        <h1>🇭🇷 克语助手 V39</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -198,12 +196,11 @@
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
     // 数据加载逻辑
-    let appData = JSON.parse(localStorage.getItem('cro_v38')) || JSON.parse(localStorage.getItem('cro_v37')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v39')) || JSON.parse(localStorage.getItem('cro_v38')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     
-    // --- 核心修复：记忆上次访问的单元 ---
+    // 记忆进度
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
-    // 检查保存的索引是否有效
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
 
     let currentMode = 'quiz';
@@ -230,17 +227,18 @@
 
         if (appData.length === 0) { nameInput.placeholder = "单元名称"; list.innerHTML = '<div style="text-align:center;color:#999;padding:40px">暂无单词</div>'; return; }
         
-        // --- 下拉菜单逻辑优化：隐藏错题本 ---
+        // --- V39 优化：幽灵模式下拉菜单 ---
         appData.forEach((u, i) => {
-            // 如果是错题本，不在下拉列表显示 (通过图标进入)
-            if (u.name !== "📕 错题本") {
+            // 规则：
+            // 1. 普通单元：正常显示
+            // 2. 错题本：平时不显示，只有当 currentUnitIdx 正好也是错题本时，才显示 (为了让标题栏有字)
+            if (u.name !== "📕 错题本" || i === currentUnitIdx) {
                 select.add(new Option(u.name, i));
             }
             insertSelect.add(new Option(`在 ${u.name} 后`, i));
         });
 
-        // 同步下拉菜单的选中状态
-        // 如果当前是错题本(或者其他不在列表里的)，下拉菜单可能显示空或者第一个，这没关系
+        // 确保下拉菜单的选中状态正确
         select.value = currentUnitIdx; 
         
         if(currentUnitIdx !== -1 && appData[currentUnitIdx]) { nameInput.placeholder = `留空则添加到: ${appData[currentUnitIdx].name}`; }
@@ -274,20 +272,16 @@
         });
     }
 
-    // --- 跳转逻辑更新：记忆进度 ---
     function jumpToUnit() {
-        // 直接从下拉菜单获取 index
         currentUnitIdx = parseInt(document.getElementById('unitSelect').value);
-        saveState(); // 记录状态
-        render();
+        saveState(); render();
     }
 
     function changeUnit(dir) { 
         let n = currentUnitIdx + dir; 
         if(n >= 0 && n < appData.length) { 
             currentUnitIdx = n; 
-            saveState(); // 记录状态
-            render(); 
+            saveState(); render(); 
         } 
     }
 
@@ -297,25 +291,14 @@
         const idx=appData.findIndex(u=>u.name===name); 
         if(idx>-1) appData[idx].words=notebook; 
         else appData.unshift({name, words:notebook}); 
-        
-        // 切换到错题本，通常在第0位或搜索到的位置
         currentUnitIdx = (idx > -1) ? idx : 0; 
-        saveState(); // 记录状态
-        render(); 
+        saveState(); render(); 
     }
 
-    // --- 状态保存函数 ---
-    function saveState() {
-        localStorage.setItem('cro_last_unit_idx', currentUnitIdx);
-    }
-    
-    function saveData() { 
-        localStorage.setItem('cro_v38', JSON.stringify(appData)); 
-        // 数据变动时也顺便保存一下状态
-        saveState();
-    }
+    function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
+    function saveData() { localStorage.setItem('cro_v39', JSON.stringify(appData)); saveState(); }
 
-    // --- 拖拽功能 (全平台) ---
+    // --- 拖拽功能 ---
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
     function handleTouchEnd(e) { clearTimeout(pressTimer); if (isDragActive) stopDragging(); isDragActive = false; }
@@ -329,7 +312,6 @@
     // --- 基础功能 ---
     function enableEdit(el, idx, field) { el.contentEditable = true; el.focus(); el.classList.add('editing'); el.onkeydown = null; el.onblur = () => { el.contentEditable = false; el.classList.remove('editing'); updateWord(idx, field, el.innerText); }; }
     function updateWord(idx, field, val) { const cleanVal = fixCroText(val); appData[currentUnitIdx].words[idx][field] = cleanVal; if(appData[currentUnitIdx].name === "📕 错题本") { if(notebook[idx]) notebook[idx][field] = cleanVal; localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } saveData(); }
-    
     function importWords() {
         let name = document.getElementById('unitNameInput').value.trim(); const text = document.getElementById('importText').value.trim(); const after = parseInt(document.getElementById('insertAfterSelect').value);
         if(!text) return; let targetUnitIndex = -1; if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
