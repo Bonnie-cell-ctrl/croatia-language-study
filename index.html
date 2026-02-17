@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V46 (双端完美版)</title>
+    <title>克语助手 V47 (真·数据库版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -19,7 +19,7 @@
             color: #333; 
             overscroll-behavior-y: contain; 
             -webkit-tap-highlight-color: transparent;
-            padding-bottom: 50px;
+            padding-bottom: 60px;
         }
 
         .sticky-header {
@@ -130,7 +130,7 @@
         .char-btn:active { background: #4f46e5; color: white; }
         .spelling-feedback { min-height: 24px; margin-bottom: 15px; font-weight: bold; }
 
-        /* 沉浸模式 */
+        /* 沉浸模式样式 */
         #immersiveOverlay {
             display: none; position: fixed; inset: 0; background: #000; z-index: 3000;
             color: #fff; flex-direction: column; align-items: center; justify-content: center;
@@ -151,7 +151,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V46</h1>
+        <h1>🇭🇷 克语助手 V47 (数据库版)</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -184,6 +184,7 @@
             <button class="mode-btn" onclick="copyFullCode()">复制全码</button>
             <button class="mode-btn" onclick="importFromCode()">代码导入</button>
         </div>
+        <button class="mode-btn" style="width:100%; margin-top:15px; background:#e0f2fe; color:#0369a1;" onclick="clearAudioCache()">🗑️ 清空音频缓存 (释放空间)</button>
     </div>
 
     <div style="text-align:center; color:#6366f1; margin: 20px 0; cursor:pointer; font-weight:bold" onclick="togglePanel('importPanel')">＋ 录入新词</div>
@@ -208,11 +209,11 @@
 </div>
 
 <div id="immersiveOverlay">
-    <div id="cacheStatus">☁️ 正在搬运音频，请耐心等待...</div>
+    <div id="cacheStatus" style="display:none"></div>
     <div id="immHr" class="immersive-word">准备播放...</div>
     <div id="immCn" class="immersive-cn"></div>
     <div class="immersive-ctrl" onclick="stopImmersiveMode()">⏹</div>
-    <div class="immersive-tip" id="deviceTip"></div>
+    <div class="immersive-tip">🎧 真·数据库版<br>首次下载较慢 (防封)，再次播放零流量</div>
 </div>
 
 <audio id="audioPlayer" playsinline></audio>
@@ -220,43 +221,65 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    // --- 数据加载 ---
-    let appData = JSON.parse(localStorage.getItem('cro_v46')) || JSON.parse(localStorage.getItem('cro_v45')) || [];
+    // --- IndexedDB 数据库管理 ---
+    const DB_NAME = 'CroHelperAudioDB';
+    const DB_VERSION = 1;
+    let db;
+
+    function initDB() {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = function(event) {
+            db = event.target.result;
+            if (!db.objectStoreNames.contains('audios')) {
+                db.createObjectStore('audios', { keyPath: 'id' });
+            }
+        };
+        request.onsuccess = function(event) { db = event.target.result; console.log("DB Ready"); };
+        request.onerror = function(event) { console.log("DB Error", event); };
+    }
+    initDB();
+
+    async function getAudioBlob(text, lang) {
+        return new Promise((resolve, reject) => {
+            if(!db) return resolve(null);
+            const key = `${lang}_${text}`;
+            const tx = db.transaction(['audios'], 'readonly');
+            const store = tx.objectStore('audios');
+            const req = store.get(key);
+            req.onsuccess = (e) => {
+                const res = e.target.result;
+                resolve(res ? res.blob : null);
+            };
+            req.onerror = () => resolve(null);
+        });
+    }
+
+    async function saveAudioBlob(text, lang, blob) {
+        if(!db) return;
+        const key = `${lang}_${text}`;
+        const tx = db.transaction(['audios'], 'readwrite');
+        const store = tx.objectStore('audios');
+        store.put({ id: key, blob: blob, timestamp: Date.now() });
+    }
+
+    async function clearAudioCache() {
+        if(!confirm('确定要清空所有已下载的音频吗？下次播放需要重新下载。')) return;
+        if(!db) return;
+        const tx = db.transaction(['audios'], 'readwrite');
+        tx.objectStore('audios').clear();
+        alert('缓存已清空');
+    }
+
+    // --- 常规逻辑 ---
+    let appData = JSON.parse(localStorage.getItem('cro_v47')) || JSON.parse(localStorage.getItem('cro_v46')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
-
-    // --- 设备识别 ---
-    // 简单判断是否为 iOS 设备 (iPhone/iPad/iPod/Mac)
-    const isIOS = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document;
-
-    // --- 🐿️ 松鼠缓存 (仅 Android/PC 使用) ---
-    let audioCacheHistory = JSON.parse(localStorage.getItem('cro_audio_history')) || {};
-    function markAsCached(text, lang) {
-        if(isIOS) return; // iOS 不需要缓存
-        const key = `${lang}_${text}`;
-        if (!audioCacheHistory[key]) {
-            audioCacheHistory[key] = 1;
-            localStorage.setItem('cro_audio_history', JSON.stringify(audioCacheHistory));
-        }
-    }
-    function isCached(text, lang) {
-        return !!audioCacheHistory[`${lang}_${text}`];
-    }
 
     let currentMode = 'quiz';
     let challengeList = [];
     const audioPlayer = document.getElementById('audioPlayer');
     
-    // Google API 错误处理 (仅 Android/PC 触发)
-    audioPlayer.onerror = function() {
-        if (!isIOS && isImmersive) {
-            console.log('Google API Error, skipping...');
-            document.getElementById('cacheStatus').innerText = "⚠️ 接口受限，正在跳过...";
-            setTimeout(() => { playQueueIndex++; processQueue(); }, 2000);
-        }
-    };
-
     let dragEl = null; let pressTimer = null; let isDragActive = false; let startY = 0;
     let isImmersive = false;
     let playQueue = []; 
@@ -266,9 +289,7 @@
     function fixCroText(text) {
         if (!text) return "";
         let t = text.normalize('NFC');
-        t = t.replace(/c\s*ˇ/g, "č").replace(/C\s*ˇ/g, "Č");
-        t = t.replace(/s\s*ˇ/g, "š").replace(/S\s*ˇ/g, "Š");
-        t = t.replace(/z\s*ˇ/g, "ž").replace(/Z\s*ˇ/g, "Ž");
+        t = t.replace(/c\s*ˇ/g, "č").replace(/C\s*ˇ/g, "Č").replace(/s\s*ˇ/g, "š").replace(/S\s*ˇ/g, "Š").replace(/z\s*ˇ/g, "ž").replace(/Z\s*ˇ/g, "Ž");
         return t;
     }
 
@@ -294,7 +315,7 @@
             const safeHr = fixCroText(w.hr); const safeCn = fixCroText(w.cn);
             row.innerHTML = `
                 <div class="left-part">
-                    <span onclick="playUnified('${safeHr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">${audioIconSvg}</span>
+                    <span onclick="playDb('${safeHr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">${audioIconSvg}</span>
                     <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${safeHr}</div>
                 </div>
                 <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${safeCn}</div>
@@ -313,53 +334,86 @@
         });
     }
 
-    // --- 统一播放入口 (关键!) ---
-    function playUnified(text, lang, onEndCallback) {
+    // --- 核心播放逻辑 (Database + Fetch) ---
+    async function playDb(text, lang, onEndCallback) {
         if (!text) { if(onEndCallback) onEndCallback(); return; }
 
-        if (isIOS) {
-            // === iOS 策略：直接用原生 ===
-            speakLocal(text, lang, onEndCallback);
-        } else {
-            // === Android/PC 策略：用 Google + 松鼠缓存 ===
-            playGoogleWithCache(text, lang, onEndCallback);
+        try {
+            // 1. 尝试从 DB 读取
+            const cachedBlob = await getAudioBlob(text, lang);
+            
+            if (cachedBlob) {
+                // A. 命中缓存：直接播 Blob
+                const url = URL.createObjectURL(cachedBlob);
+                audioPlayer.src = url;
+                audioPlayer.playbackRate = (lang === 'zh-CN') ? 1.1 : 1.0;
+                audioPlayer.onended = () => { 
+                    if(onEndCallback) onEndCallback(true); // true = fast play
+                    URL.revokeObjectURL(url); // 释放内存
+                };
+                audioPlayer.onerror = (e) => { 
+                    console.log("Blob Play Error", e); 
+                    if(onEndCallback) onEndCallback(false); 
+                };
+                audioPlayer.play();
+                
+                // UI 提示
+                if(isImmersive) {
+                    const statusEl = document.getElementById('cacheStatus');
+                    statusEl.innerText = "💾 本地极速播放";
+                    statusEl.style.color = "#28a745";
+                    statusEl.style.display = 'block';
+                }
+
+            } else {
+                // B. 未命中：下载 -> 存库 -> 播
+                if(isImmersive) {
+                    const statusEl = document.getElementById('cacheStatus');
+                    statusEl.innerText = "📥 正在下载入库 (慢速防封)...";
+                    statusEl.style.color = "#facc15";
+                    statusEl.style.display = 'block';
+                }
+
+                const gUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=gtx`;
+                
+                // Fetch 获取 Blob
+                const response = await fetch(gUrl);
+                if (!response.ok) throw new Error("Network response was not ok");
+                
+                const blob = await response.blob();
+                
+                // 存入 IndexedDB
+                await saveAudioBlob(text, lang, blob);
+                
+                // 播放刚刚下载的
+                const url = URL.createObjectURL(blob);
+                audioPlayer.src = url;
+                audioPlayer.playbackRate = (lang === 'zh-CN') ? 1.1 : 1.0;
+                audioPlayer.onended = () => {
+                    if(onEndCallback) onEndCallback(false); // false = slow play (fresh download)
+                    URL.revokeObjectURL(url);
+                };
+                audioPlayer.play();
+            }
+
+        } catch (err) {
+            console.log("PlayDB Error:", err);
+            // 失败时的兜底：本地机械音
+            if(isImmersive) {
+                const statusEl = document.getElementById('cacheStatus');
+                statusEl.innerText = "⚠️ 下载失败，临时使用本地音";
+                statusEl.style.color = "#dc3545";
+            }
+            speakLocalFallback(text, lang, onEndCallback);
         }
     }
 
-    // Google 播放逻辑 (Android)
-    function playGoogleWithCache(text, lang, onEndCallback) {
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=gtx`;
-        audioPlayer.src = url;
-        audioPlayer.playbackRate = (lang === 'zh-CN') ? 1.1 : 1.0;
-        
-        audioPlayer.onended = () => { 
-            markAsCached(text, lang); // 成功播放则记入缓存
-            if(onEndCallback) onEndCallback(); 
-        };
-        
-        audioPlayer.play().catch(e => {
-            console.log("Play failed, fallback local", e);
-            // 失败时降级到本地 (虽然Android本地发音烂，但比没声音强)
-            speakLocal(text, lang, onEndCallback);
-        });
-    }
-
-    // 本地播放逻辑 (iOS 主力 / Android 备用)
-    function speakLocal(text, lang, onEndCallback) {
-        // iOS 必须先 cancel，否则有时候会卡住
+    function speakLocalFallback(text, lang, onEndCallback) {
         window.speechSynthesis.cancel();
-
         const u = new SpeechSynthesisUtterance(text);
-        // 语言映射
-        if (lang === 'hr') u.lang = 'hr-HR';
-        else if (lang === 'zh-CN') u.lang = 'zh-CN';
-        
-        // 速率微调
-        u.rate = isIOS ? 0.9 : 1.0; 
-        
-        u.onend = () => { if(onEndCallback) onEndCallback(); };
-        u.onerror = () => { if(onEndCallback) onEndCallback(); }; // 容错
-        
+        if (lang === 'hr') u.lang = 'hr-HR'; else if (lang === 'zh-CN') u.lang = 'zh-CN';
+        u.onend = () => { if(onEndCallback) onEndCallback(false); };
+        u.onerror = () => { if(onEndCallback) onEndCallback(false); };
         window.speechSynthesis.speak(u);
     }
 
@@ -372,18 +426,10 @@
         
         isImmersive = true;
         document.getElementById('immersiveOverlay').style.display = 'flex';
-        document.getElementById('cacheStatus').style.display = 'none';
-        
-        // 提示语区分
-        const tipText = isIOS ? 
-            "🍎 iOS 原生模式：极速连播，无需联网" : 
-            "🤖 安卓松鼠模式：首次播放慢速缓存，复习极速";
-        document.getElementById('deviceTip').innerText = tipText;
-
         requestWakeLock();
         
-        // Android 激活 AudioContext
-        if(!isIOS) { audioPlayer.src = ""; audioPlayer.play().catch(()=>{}); }
+        // 激活 AudioContext
+        audioPlayer.src = ""; audioPlayer.play().catch(()=>{});
 
         playQueue = [];
         unit.words.forEach((w, idx) => {
@@ -393,7 +439,7 @@
             if (cnText && cnText.trim()) {
                 playQueue.push({ type: 'speak', text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
             }
-            playQueue.push({ type: 'delay' }); 
+            playQueue.push({ type: 'delay' });
         });
 
         playQueueIndex = 0;
@@ -432,57 +478,53 @@
         }
 
         if (item.type === 'delay') {
-            let delayTime = 1000; // 默认停顿 1s
-            
-            // Android 动态延时策略
-            if (!isIOS) {
-                // 检查前一个单词是否是新词
-                // (逻辑简化：如果不是iOS，默认稍慢一点求稳，如果已缓存则快)
-                // 这里我们简化处理：Android 统一给 1.2s 停顿，如果上一句是生肉播放，之前的播放过程本身就很长，这里只需正常间隔
-                // 真正的防封延迟是在"播放前"还是"播放后"？
-                // V45逻辑是：如果上一句是生肉，那么在它播放完之后，多休息一会。
-                
-                // 查找上一个 speak item
-                let prevItem = null;
-                for(let i = playQueueIndex - 1; i >= 0; i--) {
-                    if(playQueue[i].type === 'speak') { prevItem = playQueue[i]; break; }
-                }
-
-                if (prevItem && !isCached(prevItem.text, prevItem.lang)) {
-                    delayTime = 3500; // 强制休息，等待 Google
-                    document.getElementById('cacheStatus').style.display = 'block';
-                } else {
-                    document.getElementById('cacheStatus').style.display = 'none';
-                }
-            }
-
+            // 这里我们不需要刻意 sleep，因为 download 过程本身就耗时
+            // 如果是 cached (fast play)，稍微停顿一下体验更好
+            // 如果是 download (slow play)，已经够慢了，停顿短一点
+            // 逻辑由上一个 speak 的 callback 传入的 isFast 决定，这里简化为固定停顿
             setTimeout(() => {
                 playQueueIndex++;
                 processQueue();
-            }, delayTime);
+            }, 1000); 
 
         } else if (item.type === 'speak') {
-            playUnified(item.text, item.lang, () => {
+            
+            // 检查是不是需要慢速防封
+            // 我们在 playDb 内部做下载，下载本身需要时间。
+            // 为了安全，如果是"未缓存"状态，我们在 playDb 前可以加一个人工延时
+            
+            checkCacheAndPlay(item);
+        }
+    }
+
+    async function checkCacheAndPlay(item) {
+        const cached = await getAudioBlob(item.text, item.lang);
+        
+        if (!cached) {
+            // 未缓存：这属于"危险操作" (下载)，强制增加 3秒 前置等待
+            // 这样 Google 看到的是：请求 -> 播放+等待(5s) -> 请求
+            setTimeout(() => {
+                playDb(item.text, item.lang, () => {
+                    playQueueIndex++;
+                    processQueue();
+                });
+            }, 3000); 
+        } else {
+            // 已缓存：直接播
+            playDb(item.text, item.lang, () => {
                 playQueueIndex++;
                 processQueue();
             });
         }
     }
 
-    // --- 其他逻辑保持不变 ---
+    // --- 其他逻辑 ---
     function jumpToUnit() { currentUnitIdx = parseInt(document.getElementById('unitSelect').value); exitNotebookMode(); saveState(); render(); }
     function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; exitNotebookMode(); saveState(); render(); } }
-    function goToNotebook() { 
-        if(notebook.length===0) return alert('空'); 
-        localStorage.setItem('cro_viewing_notebook', 'true');
-        const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); 
-        if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); 
-        currentUnitIdx = (idx > -1) ? idx : 0; saveState(); render(); 
-    }
+    function goToNotebook() { if(notebook.length===0) return alert('空'); localStorage.setItem('cro_viewing_notebook', 'true'); const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); currentUnitIdx = (idx > -1) ? idx : 0; saveState(); render(); }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function saveData() { localStorage.setItem('cro_v46', JSON.stringify(appData)); saveState(); }
-
+    function saveData() { localStorage.setItem('cro_v47', JSON.stringify(appData)); saveState(); }
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
     function handleTouchEnd(e) { clearTimeout(pressTimer); if (isDragActive) stopDragging(); isDragActive = false; }
@@ -492,7 +534,6 @@
     function performDrag(x, y) { const target = document.elementFromPoint(x, y); const targetRow = target ? target.closest('.word-row') : null; if (targetRow && targetRow !== dragEl) { const list = document.getElementById('wordListContainer'); const children = Array.from(list.children); const dragIndex = children.indexOf(dragEl); const targetIndex = children.indexOf(targetRow); if (dragIndex < targetIndex) list.insertBefore(dragEl, targetRow.nextSibling); else list.insertBefore(dragEl, targetRow); } }
     function stopDragging() { if(dragEl) { dragEl.classList.remove('dragging'); const handle = dragEl.querySelector('.drag-handle'); if(handle) handle.classList.remove('active'); rebuildDataFromDOM(); } isDragActive = false; dragEl = null; }
     function rebuildDataFromDOM() { const rows = document.querySelectorAll('.word-row'); const newWords = []; rows.forEach(row => { newWords.push({hr: row.querySelector('.col-hr').innerText, cn: row.querySelector('.col-cn').innerText}); }); appData[currentUnitIdx].words = newWords; saveData(); render(); }
-
     function enableEdit(el, idx, field) { el.contentEditable = true; el.focus(); el.classList.add('editing'); el.onkeydown = null; el.onblur = () => { el.contentEditable = false; el.classList.remove('editing'); updateWord(idx, field, el.innerText); }; }
     function updateWord(idx, field, val) { const cleanVal = fixCroText(val); appData[currentUnitIdx].words[idx][field] = cleanVal; if(appData[currentUnitIdx].name === "📕 错题本") { if(notebook[idx]) notebook[idx][field] = cleanVal; localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } saveData(); }
     function importWords() {
@@ -503,14 +544,13 @@
         else { if(!name) name = "新单元"; if(after === -1) appData.unshift({name, words: newWords}); else appData.splice(after+1, 0, {name, words: newWords}); alert(`已创建: "${name}"`); }
         saveData(); render(); togglePanel('importPanel'); document.getElementById('importText').value = ''; 
     }
-    
     function setMode(mode) { currentMode = mode; document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active')); document.getElementById('mode-' + mode).classList.add('active'); }
-    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return; playUnified(' ', 'hr', null); let base = [...unit.words]; let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25)); challengeList = [...base, ...extra].sort(() => Math.random() - 0.5); document.getElementById('challengeOverlay').style.display = 'flex'; showQuestion(); }
+    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return; playDb(' ', 'hr'); let base = [...unit.words]; let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25)); challengeList = [...base, ...extra].sort(() => Math.random() - 0.5); document.getElementById('challengeOverlay').style.display = 'flex'; showQuestion(); }
     function showQuestion() {
         if(challengeList.length === 0) { alert("恭喜！复习完成"); return exitChallenge(); }
         const main = document.getElementById('challengeMain'); main.innerHTML = ''; document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
         const current = challengeList[0];
-        if(document.getElementById('autoVoice').checked) playUnified(current.hr, 'hr', null);
+        if(document.getElementById('autoVoice').checked) playDb(current.hr, 'hr');
         let displayMode = currentMode;
         if (currentMode === 'mixed') { const r = Math.random(); if (challengeList.length >= 4 && r < 0.3) displayMode = 'match'; else if (r < 0.65) displayMode = 'quiz'; else displayMode = 'spell'; }
         if(displayMode === 'quiz') {
@@ -523,10 +563,10 @@
             const num = Math.min(challengeList.length, 4); const currentBatch = challengeList.slice(0, num);
             const items = [...currentBatch.map(s => ({t: s.hr, id: s.hr, type:'hr'})), ...currentBatch.map(s => ({t: s.cn, id: s.hr, type:'cn'}))].sort(() => Math.random() - 0.5);
             main.innerHTML = `<div class="match-grid"></div>`; const grid = main.querySelector('.match-grid'); let first = null; let matchedCount = 0;
-            items.forEach(item => { const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t; div.onclick = () => { if(div.classList.contains('hidden') || div.classList.contains('match-correct')) return; if(item.type === 'hr') playUnified(item.t, 'hr', null); div.classList.add('selected'); if(!first) { first = {div, item}; } else { if(first.div === div) return; if(first.item.id === item.id) { first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; const fDiv = first.div; const sDiv = div; setTimeout(() => { fDiv.classList.add('hidden'); sDiv.classList.add('hidden'); if(matchedCount === num) { challengeList.splice(0, num); showQuestion(); } }, 400); } else { div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id || c.hr === first.item.id)); const fDiv = first.div; const sDiv = div; setTimeout(() => { sDiv.className = 'match-item'; fDiv.className = 'match-item'; }, 500); } first = null; } }; grid.appendChild(div); });
+            items.forEach(item => { const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t; div.onclick = () => { if(div.classList.contains('hidden') || div.classList.contains('match-correct')) return; if(item.type === 'hr') playDb(item.t, 'hr'); div.classList.add('selected'); if(!first) { first = {div, item}; } else { if(first.div === div) return; if(first.item.id === item.id) { first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; const fDiv = first.div; const sDiv = div; setTimeout(() => { fDiv.classList.add('hidden'); sDiv.classList.add('hidden'); if(matchedCount === num) { challengeList.splice(0, num); showQuestion(); } }, 400); } else { div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id || c.hr === first.item.id)); const fDiv = first.div; const sDiv = div; setTimeout(() => { sDiv.className = 'match-item'; fDiv.className = 'match-item'; }, 500); } first = null; } }; grid.appendChild(div); });
         }
         else if (displayMode === 'spell') {
-            main.innerHTML = `<div class="spelling-container"><div style="font-size:24px; color:#333; margin-bottom:20px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div><div id="spellFeedback" class="spelling-feedback"></div><input type="text" id="spellInput" class="spelling-input" placeholder="输入克语 (听写)" autocomplete="off"><div class="special-chars">${['č','ć','đ','š','ž'].map(c => `<div class="char-btn" onclick="typeChar('${c}')">${c}</div>`).join('')}</div><button class="start-btn" onclick="checkSpelling()">提交验证</button><div style="margin-top:20px; color:#666; font-size:14px" onclick="playUnified('${current.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr', null)">🔊 重听</div></div>`;
+            main.innerHTML = `<div class="spelling-container"><div style="font-size:24px; color:#333; margin-bottom:20px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div><div id="spellFeedback" class="spelling-feedback"></div><input type="text" id="spellInput" class="spelling-input" placeholder="输入克语 (听写)" autocomplete="off"><div class="special-chars">${['č','ć','đ','š','ž'].map(c => `<div class="char-btn" onclick="typeChar('${c}')">${c}</div>`).join('')}</div><button class="start-btn" onclick="checkSpelling()">提交验证</button><div style="margin-top:20px; color:#666; font-size:14px" onclick="playDb('${current.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">🔊 重听</div></div>`;
             const input = document.getElementById('spellInput'); input.focus(); input.onkeydown = (e) => { if(e.key === 'Enter') checkSpelling(); };
         }
     }
