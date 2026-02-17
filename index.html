@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V44 (智能双引擎版)</title>
+    <title>克语助手 V45 (松鼠搬家版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -142,15 +142,16 @@
             display: flex; align-items: center; justify-content: center; font-size: 30px;
             cursor: pointer; border: 2px solid #555;
         }
-        .immersive-tip { position: absolute; bottom: 40px; font-size: 12px; color: #444; }
-        #errorTip { color: #fcd34d; font-size: 14px; margin-bottom: 10px; display: none;}
+        .immersive-tip { position: absolute; bottom: 40px; font-size: 12px; color: #666; }
+        /* 状态提示 */
+        #cacheStatus { font-size: 14px; margin-bottom: 20px; color: #facc15; font-weight: bold; display: none; }
     </style>
 </head>
 <body>
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V44</h1>
+        <h1>🇭🇷 克语助手 V45</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -207,11 +208,11 @@
 </div>
 
 <div id="immersiveOverlay">
-    <div id="errorTip">🌐 网络受限，已自动切换为本地语音引擎</div>
+    <div id="cacheStatus">☁️ 正在搬运音频，请耐心等待...</div>
     <div id="immHr" class="immersive-word">准备播放...</div>
     <div id="immCn" class="immersive-cn"></div>
     <div class="immersive-ctrl" onclick="stopImmersiveMode()">⏹</div>
-    <div class="immersive-tip">已开启防息屏 + 智能双引擎<br>网络不通时将使用手机自带发音</div>
+    <div class="immersive-tip">🐿️ 松鼠模式：首次播放会自动慢速下载<br>再次播放将极速流畅</div>
 </div>
 
 <audio id="audioPlayer" playsinline></audio>
@@ -219,26 +220,37 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v44')) || JSON.parse(localStorage.getItem('cro_v43_1')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v45')) || JSON.parse(localStorage.getItem('cro_v44')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
+
+    // --- 🐿️ 松鼠缓存系统 ---
+    // 记录已经成功播放过的音频 URL 签名 (text + lang)
+    let audioCacheHistory = JSON.parse(localStorage.getItem('cro_audio_history')) || {};
+
+    function markAsCached(text, lang) {
+        const key = `${lang}_${text}`;
+        if (!audioCacheHistory[key]) {
+            audioCacheHistory[key] = 1;
+            localStorage.setItem('cro_audio_history', JSON.stringify(audioCacheHistory));
+        }
+    }
+
+    function isCached(text, lang) {
+        return !!audioCacheHistory[`${lang}_${text}`];
+    }
 
     let currentMode = 'quiz';
     let challengeList = [];
     const audioPlayer = document.getElementById('audioPlayer');
     
-    // --- 核心变量：是否强制使用本地引擎 ---
-    let forceLocalTTS = false; 
-
-    // 监听网络播放错误，自动切换到本地
+    // 错误处理：如果 Google 挂了，强制用本地，防止卡死
     audioPlayer.onerror = function() {
-        console.log('Google API Error, switching to local.');
-        forceLocalTTS = true; 
+        console.log('API Error, auto skip.');
         if(isImmersive) {
-            document.getElementById('errorTip').style.display = 'block';
-            // 稍后重试当前项（会自动走本地逻辑）
-            setTimeout(() => { processQueue(); }, 500);
+            document.getElementById('cacheStatus').innerText = "⚠️ 网络受限，正在尝试跳过...";
+            setTimeout(() => { playQueueIndex++; processQueue(); }, 2000);
         }
     };
 
@@ -279,7 +291,7 @@
             const safeHr = fixCroText(w.hr); const safeCn = fixCroText(w.cn);
             row.innerHTML = `
                 <div class="left-part">
-                    <span onclick="playSingleItem('${safeHr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">${audioIconSvg}</span>
+                    <span onclick="playSmart('${safeHr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">${audioIconSvg}</span>
                     <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${safeHr}</div>
                 </div>
                 <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${safeCn}</div>
@@ -298,64 +310,33 @@
         });
     }
 
-    // --- 智能双引擎播放系统 ---
-    
-    // 统一播放入口：自动判断用网络还是本地
+    // --- 智能播放系统 ---
     function playSmart(text, lang, onEndCallback) {
         if (!text) { if(onEndCallback) onEndCallback(); return; }
 
-        // 1. 如果已标记为强制本地，或网络不可用，直接用本地
-        if (forceLocalTTS || !navigator.onLine) {
-            speakLocal(text, lang, onEndCallback);
-            return;
-        }
-
-        // 2. 尝试网络播放
         const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=gtx`;
         audioPlayer.src = url;
         audioPlayer.playbackRate = (lang === 'zh-CN') ? 1.1 : 1.0;
         
-        // 设置回调
-        audioPlayer.onended = () => { if(onEndCallback) onEndCallback(); };
-        
-        // 播放，如果失败（被封或网络错），会触发全局 onerror，然后由 onerror 里的逻辑接管
-        const playPromise = audioPlayer.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.log("Network play failed, fallback to local.");
-                forceLocalTTS = true; // 标记后续都用本地
-                if(isImmersive) document.getElementById('errorTip').style.display = 'block';
-                speakLocal(text, lang, onEndCallback); // 立即切换
-            });
-        }
-    }
-
-    // 本地引擎 (Web Speech API)
-    function speakLocal(text, lang, onEndCallback) {
-        // 取消正在说的
-        window.speechSynthesis.cancel();
-
-        const u = new SpeechSynthesisUtterance(text);
-        // 映射语言代码
-        if (lang === 'hr') u.lang = 'hr-HR';
-        else if (lang === 'zh-CN') u.lang = 'zh-CN';
-        
-        u.rate = 0.9; // 本地语速微调
-        
-        u.onend = () => { if(onEndCallback) onEndCallback(); };
-        u.onerror = (e) => { 
-            console.log('Local TTS Error', e); 
-            if(onEndCallback) onEndCallback(); // 即使出错也继续下一项
+        audioPlayer.onended = () => { 
+            // 播放成功，标记为已缓存
+            markAsCached(text, lang);
+            if(onEndCallback) onEndCallback(true); // true = success
         };
         
-        window.speechSynthesis.speak(u);
+        audioPlayer.play().catch(e => {
+            console.log("Play failed", e);
+            // 失败时，如果是沉浸模式，会由 processQueue 的超时逻辑接管
+            // 如果是点读，尝试本地
+            if(!isImmersive) speakLocal(text, lang);
+        });
     }
 
-    // 单点播放
-    function playSingleItem(text, lang) {
-        if(isImmersive) return;
-        // 单点播放不需要回调
-        playSmart(text, lang, null);
+    // 备用本地发音
+    function speakLocal(text, lang) {
+        const u = new SpeechSynthesisUtterance(text);
+        if (lang === 'hr') u.lang = 'hr-HR'; else if (lang === 'zh-CN') u.lang = 'zh-CN';
+        window.speechSynthesis.speak(u);
     }
 
     // --- 沉浸式逻辑 ---
@@ -367,10 +348,10 @@
         
         isImmersive = true;
         document.getElementById('immersiveOverlay').style.display = 'flex';
-        document.getElementById('errorTip').style.display = forceLocalTTS ? 'block' : 'none';
+        document.getElementById('cacheStatus').style.display = 'none';
         requestWakeLock();
 
-        // 播放空声音激活 AudioContext (对iOS重要)
+        // 播放空声激活
         audioPlayer.src = ""; audioPlayer.play().catch(()=>{});
 
         // 构建队列
@@ -382,7 +363,7 @@
             if (cnText && cnText.trim()) {
                 playQueue.push({ type: 'audio', text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
             }
-            playQueue.push({ type: 'delay', ms: 1200 }); 
+            playQueue.push({ type: 'delay' }); // 动态延时
         });
 
         playQueueIndex = 0;
@@ -393,7 +374,6 @@
         isImmersive = false;
         document.getElementById('immersiveOverlay').style.display = 'none';
         audioPlayer.pause();
-        window.speechSynthesis.cancel(); // 停止本地语音
         if (wakeLock) { wakeLock.release(); wakeLock = null; }
         document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
     }
@@ -414,25 +394,45 @@
             if(item.rowIndex !== undefined) {
                 document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
                 const row = document.getElementById(`word-row-${item.rowIndex}`);
-                if(row) row.classList.add('playing-now');
+                if(row) {
+                    row.classList.add('playing-now');
+                    row.scrollIntoView({behavior: "smooth", block: "center"});
+                }
             }
         }
 
         if (item.type === 'delay') {
+            // 动态延时逻辑：如果是"生肉"(上一个音频未缓存)，则强制休息 3.5秒
+            let delayTime = 800; // 默认快
+            const prevItem = playQueueIndex > 0 ? playQueue[playQueueIndex - 1] : null;
+            
+            if (prevItem && prevItem.type === 'audio') {
+                const cached = isCached(prevItem.text, prevItem.lang);
+                if (!cached) {
+                    delayTime = 3500; // 慢速下载模式
+                    const statusEl = document.getElementById('cacheStatus');
+                    statusEl.innerText = "☁️ 正在搬运音频... (首次播放较慢)";
+                    statusEl.style.display = 'block';
+                } else {
+                    document.getElementById('cacheStatus').style.display = 'none';
+                }
+            }
+
             setTimeout(() => {
                 playQueueIndex++;
                 processQueue();
-            }, item.ms);
+            }, delayTime);
+
         } else if (item.type === 'audio') {
-            // 使用双引擎播放
-            playSmart(item.text, item.lang, () => {
+            playSmart(item.text, item.lang, (success) => {
+                // 播放结束后继续
                 playQueueIndex++;
                 processQueue();
             });
         }
     }
 
-    // --- 其他功能保持不变 ---
+    // --- 常规功能 ---
     function jumpToUnit() { currentUnitIdx = parseInt(document.getElementById('unitSelect').value); exitNotebookMode(); saveState(); render(); }
     function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; exitNotebookMode(); saveState(); render(); } }
     function goToNotebook() { 
@@ -444,7 +444,7 @@
     }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function saveData() { localStorage.setItem('cro_v44', JSON.stringify(appData)); saveState(); }
+    function saveData() { localStorage.setItem('cro_v45', JSON.stringify(appData)); saveState(); }
 
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
@@ -468,7 +468,7 @@
     }
     
     function setMode(mode) { currentMode = mode; document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active')); document.getElementById('mode-' + mode).classList.add('active'); }
-    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return; simplePlay(' '); let base = [...unit.words]; let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25)); challengeList = [...base, ...extra].sort(() => Math.random() - 0.5); document.getElementById('challengeOverlay').style.display = 'flex'; showQuestion(); }
+    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return; playSmart(' ', 'hr', null); let base = [...unit.words]; let extra = [...base].sort(() => Math.random() - 0.5).slice(0, Math.ceil(base.length * 0.25)); challengeList = [...base, ...extra].sort(() => Math.random() - 0.5); document.getElementById('challengeOverlay').style.display = 'flex'; showQuestion(); }
     function showQuestion() {
         if(challengeList.length === 0) { alert("恭喜！复习完成"); return exitChallenge(); }
         const main = document.getElementById('challengeMain'); main.innerHTML = ''; document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
