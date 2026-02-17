@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V53</title>
+    <title>克语助手 V54 (不死鸟版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -152,7 +152,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V53</h1>
+        <h1>🇭🇷 克语助手 V54 (不死鸟版)</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -186,7 +186,7 @@
             <button class="mode-btn" onclick="importFromCode()">代码导入</button>
         </div>
         <div id="voice-picker-container">
-            <label style="font-size:12px; color:#555;">🗣️ 选择克语发音 (请选 Google Croatian):</label>
+            <label style="font-size:12px; color:#555;">🗣️ 选择克语发音 (iPad请选Lana):</label>
             <select id="voiceSelect" onchange="saveVoiceSelection()"></select>
         </div>
     </div>
@@ -216,18 +216,16 @@
     <div id="immHr" class="immersive-word">准备播放...</div>
     <div id="immCn" class="immersive-cn"></div>
     <div class="immersive-ctrl" onclick="stopImmersiveMode()">⏹</div>
-    <div class="immersive-tip">🎧 完美接力模式<br>支持锁屏 / 0延迟 / 永不断连</div>
+    <div class="immersive-tip">🎧 永不卡顿版<br>支持锁屏 / 0延迟 / 永不断连</div>
 </div>
 
-<audio id="relayAudio" playsinline></audio>
+<audio id="bgLoop" loop playsinline style="display:none"></audio>
 
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-    
-    // 1.5秒的静音MP3 (作为间隔和保活)
     const SILENT_MP3 = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASAAAAAAAASAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA';
 
-    let appData = JSON.parse(localStorage.getItem('cro_v53')) || JSON.parse(localStorage.getItem('cro_v52')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v54')) || JSON.parse(localStorage.getItem('cro_v53')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
@@ -256,7 +254,7 @@
         if (selectedVoiceURI) select.value = selectedVoiceURI;
         if (!selectedVoiceURI && foundHr) {
             for (let i=0; i<select.options.length; i++) {
-                if (select.options[i].text.includes('Google')) {
+                if (select.options[i].text.includes('Google') || select.options[i].text.includes('Enhanced')) {
                     select.selectedIndex = i; saveVoiceSelection(); break;
                 }
             }
@@ -271,49 +269,55 @@
         speakLocal('Dobar dan', 'hr');
     }
 
-    function speakLocal(text, lang, onEndCallback) {
-        // 安全措施：读之前确保静音音频是停的
-        const relayAudio = document.getElementById('relayAudio');
-        relayAudio.pause();
+    // --- 关键修改：全局变量防止被回收 ---
+    window.currentUtterance = null;
 
+    function speakLocal(text, lang, onEndCallback) {
         window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
+        
+        // 关键：将 utterance 赋值给全局变量
+        window.currentUtterance = new SpeechSynthesisUtterance(text);
+        
         if (lang === 'hr' && selectedVoiceURI) {
             const voice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
-            if (voice) u.voice = voice;
+            if (voice) window.currentUtterance.voice = voice;
         }
-        if (lang === 'hr') u.lang = 'hr-HR'; else if (lang === 'zh-CN') u.lang = 'zh-CN';
-        u.rate = 1.0; 
+        if (lang === 'hr') window.currentUtterance.lang = 'hr-HR'; 
+        else if (lang === 'zh-CN') window.currentUtterance.lang = 'zh-CN';
         
-        // 超时保护：万一 onend 没触发（安卓通病），3秒后强制触发
-        const timeoutSafe = setTimeout(() => {
-            if(onEndCallback) onEndCallback();
-        }, (text.length * 200) + 2000); 
+        window.currentUtterance.rate = 1.0; 
+        
+        const safeCallback = () => {
+            if(onEndCallback) {
+                onEndCallback();
+                onEndCallback = null; // 防止多次调用
+            }
+        };
 
-        u.onend = () => { 
-            clearTimeout(timeoutSafe);
-            if(onEndCallback) onEndCallback(); 
+        // 超时保护：Android 经常不触发 onend，设置 4秒 兜底
+        const timer = setTimeout(safeCallback, (text.length * 200) + 3000);
+
+        window.currentUtterance.onend = () => {
+            clearTimeout(timer);
+            safeCallback();
         };
-        u.onerror = (e) => { 
-            clearTimeout(timeoutSafe);
-            console.log('TTS Error', e); 
-            if(onEndCallback) onEndCallback(); 
+        
+        window.currentUtterance.onerror = (e) => {
+            console.log("TTS Error", e);
+            clearTimeout(timer);
+            safeCallback();
         };
-        window.speechSynthesis.speak(u);
+
+        window.speechSynthesis.speak(window.currentUtterance);
     }
 
-    // --- 🎧 完美接力逻辑 ---
+    // --- 🎧 沉浸式逻辑 ---
     let isImmersive = false;
     let playQueue = [];
     let playQueueIndex = 0;
-    const relayAudio = document.getElementById('relayAudio');
+    const bgLoop = document.getElementById('bgLoop');
 
-    // 监听静音结束，触发下一轮（回合B结束 -> 回合A）
-    relayAudio.onended = function() {
-        if (!isImmersive) return;
-        playQueueIndex++;
-        processQueue();
-    };
+    async function requestWakeLock() { try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (err) {} }
 
     function startImmersiveMode() {
         const unit = appData[currentUnitIdx];
@@ -321,7 +325,6 @@
         isImmersive = true;
         document.getElementById('immersiveOverlay').style.display = 'flex';
         
-        // 更新锁屏媒体信息
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({ title: '听力复习', artist: unit.name });
             navigator.mediaSession.setActionHandler('play', () => {});
@@ -332,20 +335,23 @@
         unit.words.forEach((w, idx) => {
             const hrText = fixCroText(w.hr).replace(/[\r\n]+/g, " ");
             const cnText = fixCroText(w.cn).replace(/[\r\n]+/g, " ");
-            // 只推入 SPEAK 任务，DELAY 任务由 processQueue 自动插入
             playQueue.push({ type: 'speak', text: hrText, lang: 'hr', uiHr: hrText, uiCn: cnText, rowIndex: idx });
             if (cnText && cnText.trim()) {
                 playQueue.push({ type: 'speak', text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
             }
+            playQueue.push({ type: 'delay' });
         });
         
         playQueueIndex = 0;
-        // 激活音频环境
-        relayAudio.src = SILENT_MP3;
-        relayAudio.play().then(() => {
+        requestWakeLock();
+
+        // 关键修改：启动背景循环噪音 (传送带)
+        bgLoop.src = SILENT_MP3;
+        bgLoop.volume = 0.05; // 极小音量
+        bgLoop.play().then(() => {
             processQueue();
         }).catch(() => {
-            alert("请点击允许播放音频");
+            alert("请点击允许播放");
             processQueue();
         });
     }
@@ -354,21 +360,17 @@
         isImmersive = false;
         document.getElementById('immersiveOverlay').style.display = 'none';
         window.speechSynthesis.cancel();
-        relayAudio.pause();
+        bgLoop.pause(); // 停止传送带
+        if (wakeLock) { wakeLock.release(); wakeLock = null; }
         document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
     }
 
     function processQueue() {
         if (!isImmersive) return;
-        
-        // 循环播放逻辑
-        if (playQueueIndex >= playQueue.length) {
-            playQueueIndex = 0; // 重置
-        }
+        if (playQueueIndex >= playQueue.length) { playQueueIndex = 0; }
 
         const item = playQueue[playQueueIndex];
 
-        // UI 更新
         if (item.uiHr) {
             document.getElementById('immHr').innerText = item.uiHr;
             document.getElementById('immCn').innerText = item.uiCn;
@@ -386,19 +388,19 @@
             }
         }
 
-        // 回合A：说话
-        speakLocal(item.text, item.lang, () => {
-            // TTS 说完了
-            if (!isImmersive) return;
-            
-            // 回合B：播放静音 (充当间隔 + 保活)
-            // 每次重新加载 src 确保 onended 稳定触发
-            relayAudio.src = SILENT_MP3;
-            // 调节间隔长短：0.5倍速 = 变长， 1.5倍速 = 变短
-            relayAudio.playbackRate = 0.6; 
-            relayAudio.play();
-            // 当静音播完，relayAudio.onended 会被触发，进而调用 processQueue 进入下一个词
-        });
+        if (item.type === 'delay') {
+            // 在背景传送带上等待 1.2 秒
+            setTimeout(() => {
+                playQueueIndex++;
+                processQueue();
+            }, 1200);
+
+        } else if (item.type === 'speak') {
+            speakLocal(item.text, item.lang, () => {
+                playQueueIndex++;
+                processQueue();
+            });
+        }
     }
 
     // --- 常规功能 ---
@@ -457,7 +459,7 @@
     function goToNotebook() { if(notebook.length===0) return alert('空'); localStorage.setItem('cro_viewing_notebook', 'true'); const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); currentUnitIdx = (idx > -1) ? idx : 0; saveState(); render(); }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function saveData() { localStorage.setItem('cro_v53', JSON.stringify(appData)); saveState(); }
+    function saveData() { localStorage.setItem('cro_v54', JSON.stringify(appData)); saveState(); }
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
     function handleTouchEnd(e) { clearTimeout(pressTimer); if (isDragActive) stopDragging(); isDragActive = false; }
