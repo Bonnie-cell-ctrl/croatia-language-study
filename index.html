@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V56 (功能全通版)</title>
+    <title>克语助手 V57 (终极合体版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -19,59 +19,111 @@
             color: #333; overscroll-behavior-y: contain; 
             -webkit-tap-highlight-color: transparent; padding-bottom: 60px;
         }
-        /* 原有样式保持不变 */
-        .sticky-header { position: fixed; top: 0; left: 0; width: 100%; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); z-index: 1000; padding: 15px; box-sizing: border-box; padding-top: max(15px, env(safe-area-inset-top)); }
+
+        /* 顶部导航 */
+        .sticky-header {
+            position: fixed; top: 0; left: 0; width: 100%;
+            background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            z-index: 1000; padding: 15px; box-sizing: border-box;
+            padding-top: max(15px, env(safe-area-inset-top));
+        }
         .header-top { display: flex; justify-content: space-between; margin-bottom: 12px; }
         h1 { margin: 0; font-size: 18px; color: var(--primary); font-weight: 800; }
+        
         .nav-controls { display: flex; gap: 8px; max-width: 800px; margin: 0 auto; align-items: center; }
-        .nav-btn { background: #f0f2f5; color: #555; border: none; padding: 10px 18px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; }
-        select { flex: 1; padding: 10px; border: 1px solid #e1e4e8; border-radius: 10px; font-size: 15px; text-align: center; background: white; color: #333; font-weight: 600; }
-        .listen-btn { width: 15%; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 10px; border-radius: 10px; font-size: 18px; }
-        .notebook-btn { width: 15%; background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; padding: 10px; border-radius: 10px; font-size: 18px; }
+        .nav-btn { 
+            background: #f0f2f5; color: #555; border: none; 
+            padding: 10px 18px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px;
+        }
+        select { 
+            flex: 1; padding: 10px; border: 1px solid #e1e4e8; border-radius: 10px; 
+            font-size: 15px; text-align: center; text-align-last: center; background: white;
+            color: #333; font-weight: 600; 
+        }
+        .listen-btn { width: 15%; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 10px; border-radius: 10px; font-size: 18px; cursor: pointer;}
+        .notebook-btn { width: 15%; background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; padding: 10px; border-radius: 10px; font-size: 18px; cursor: pointer;}
+
         .container { max-width: 800px; margin: 0 auto; padding: 0 15px 120px 15px; }
-        .challenge-box { background: white; padding: 20px; border-radius: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; }
+
+        /* 挑战模式盒子 */
+        .challenge-box {
+            background: white; padding: 20px; border-radius: 20px; margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;
+        }
         .mode-selector { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 5px; }
-        .mode-btn { padding: 10px 4px; border-radius: 10px; border: 1px solid #eee; font-size: 13px; background: #f9f9f9; font-weight: 600; color: #666; cursor: pointer;}
+        .mode-btn { 
+            padding: 10px 4px; border-radius: 10px; border: 1px solid #eee; font-size: 13px; cursor: pointer;
+            background: #f9f9f9; font-weight: 600; color: #666; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+        }
         .mode-btn.active { background: #6366f1; color: white; border-color: #6366f1; }
-        .start-btn { width: 100%; margin-top: 15px; padding: 16px; border-radius: 15px; background: linear-gradient(135deg, #6366f1, #a855f7); color: white; border: none; font-size: 18px; font-weight: bold; }
-        .word-row { display: flex; padding: 16px; background: white; border-radius: 12px; margin-bottom: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
-        .word-row.playing-now { border: 2px solid #0ea5e9; background-color: #f0f9ff; }
+        .start-btn {
+            width: 100%; margin-top: 15px; padding: 16px; border-radius: 15px;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            color: white; border: none; font-size: 18px; font-weight: bold; cursor: pointer;
+        }
+
+        /* 单词行样式 */
+        .word-row {
+            display: flex; padding: 16px; background: white; border-radius: 12px;
+            margin-bottom: 10px; align-items: center; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+            position: relative; transition: transform 0.2s;
+        }
+        .word-row.playing-now {
+            border: 2px solid #0ea5e9; background-color: #f0f9ff;
+        }
+        .word-row.dragging { background: var(--drag-bg); z-index: 100; transform: scale(1.03); border: 1px solid #ffe082; }
+
         .left-part { flex: 1; display: flex; align-items: flex-start; min-width: 0; margin-right: 10px; }
-        .col-hr { font-weight: 600; white-space: pre-wrap; line-height: 1.4; }
-        .col-cn { flex: 0 0 auto; max-width: 35%; text-align: right; color: #666; font-size: 14px; }
-        .icon-audio { width: 22px; height: 22px; margin-right: 10px; fill: var(--primary); flex-shrink: 0; }
+        .col-hr { font-weight: 600; white-space: pre-wrap; word-wrap: break-word; line-height: 1.4; user-select: text; }
+        .col-cn { flex: 0 0 auto; max-width: 35%; text-align: right; color: #666; font-size: 14px; user-select: text; }
+        .editing { background: #fff !important; border-bottom: 2px solid #6366f1 !important; outline: none; }
+        .icon-audio { width: 22px; height: 22px; margin-right: 10px; fill: var(--primary); flex-shrink: 0; cursor: pointer;}
+        
         .action-area { flex: 0 0 40px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
-        .del-word-btn { color: #ddd; font-size: 16px; }
+        .del-word-btn { color: #ddd; cursor: pointer; font-size: 16px; }
+        .drag-handle { color: #ccc; cursor: grab; font-size: 24px; padding: 5px; touch-action: none; }
+
+        /* 面板样式 */
         .panel { display: none; background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
-        .footer-del-btn { width: 100%; padding: 15px; background: #fff; border: 2px solid #ffebeb; color: var(--danger); border-radius: 12px; font-weight: bold; margin-top: 30px; }
-        
-        /* 沉浸模式样式 */
-        #immersiveOverlay { display: none; position: fixed; inset: 0; background: #000; z-index: 3000; color: #fff; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; }
-        .immersive-word { font-size: 34px; font-weight: bold; margin-bottom: 20px; min-height: 50px;}
+
+        /* 沉浸模式覆盖层 */
+        #immersiveOverlay {
+            display: none; position: fixed; inset: 0; background: #000; z-index: 3000;
+            color: #fff; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 40px;
+        }
+        .immersive-word { font-size: 32px; font-weight: bold; margin-bottom: 20px; min-height: 40px; }
         .immersive-cn { font-size: 22px; color: #888; margin-bottom: 60px; min-height: 30px;}
-        .ctrl-row { display: flex; gap: 20px; align-items: center; }
-        .imm-btn { width: 60px; height: 60px; border-radius: 50%; background: #222; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 1px solid #444; }
-        
+        .imm-controls { display: flex; gap: 30px; align-items: center; }
+        .imm-btn { width: 66px; height: 66px; border-radius: 50%; background: #222; border: 1px solid #444; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; cursor: pointer; }
+        .imm-btn.active { background: #0ea5e9; border-color: #0ea5e9; }
+        .immersive-tip { position: absolute; bottom: 40px; font-size: 12px; color: #444; text-align: center; line-height: 1.6; }
+
         /* 挑战模式覆盖层 */
         #challengeOverlay { display: none; position: fixed; inset: 0; background: white; z-index: 2000; flex-direction: column; padding-top: env(safe-area-inset-top); }
         .challenge-header { display:flex; justify-content: space-between; padding:20px; border-bottom:1px solid #eee; align-items: center;}
         .challenge-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;}
-        .quiz-option { width: 100%; max-width: 400px; padding: 18px; margin-bottom: 12px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; }
+        
+        .quiz-option { width: 100%; max-width: 400px; padding: 18px; margin-bottom: 12px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; cursor: pointer; font-size: 16px;}
         .quiz-option.correct { background: var(--success); color: white; border-color: var(--success); }
         .quiz-option.wrong { background: var(--danger); color: white; border-color: var(--danger); }
         .match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 450px; }
-        .match-item { padding: 22px 10px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; background: #fff; color:#333; }
-        .match-item.selected { border-color: #6366f1; background: #f5f3ff; }
+        .match-item { padding: 22px 10px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; background: #fff; cursor: pointer; }
         .match-item.match-correct { background: var(--success) !important; color: white !important; opacity: 0.3; }
+        .spelling-container { width: 100%; max-width: 400px; text-align: center; }
         .spelling-input { width: 100%; padding: 15px; font-size: 20px; text-align: center; border: 2px solid #6366f1; border-radius: 12px; margin-bottom: 15px; outline: none; }
+        .special-chars { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 15px; }
+        .char-btn { background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V56</h1>
+        <h1>🇭🇷 克语助手 V57 (终极合体)</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -95,41 +147,45 @@
     </div>
 
     <div id="syncPanel" class="panel">
-        <div style="margin-bottom: 15px;">
-            <label style="font-size:12px; color:#555;">🗣️ 选择克语发音人:</label>
+        <div style="margin-bottom: 15px; background: #f0f9ff; padding: 10px; border-radius: 10px;">
+            <label style="font-size:12px; color:#555;">🗣️ 发音人 (iPad请选Lana增强版):</label>
             <select id="voiceSelect" onchange="saveVoiceSelection()"></select>
         </div>
         <button class="mode-btn" style="width:100%; margin-bottom:8px;" onclick="document.getElementById('fileInput').click()">⬆️ 导入JSON文件</button>
         <input type="file" id="fileInput" style="display:none" accept=".json" onchange="handleFileImport(this)">
-        <button class="mode-btn" style="width:100%; margin-bottom:15px;" onclick="downloadAll()">⬇️ 下载备份</button>
-        <textarea id="codeText" class="input-box" style="height:60px;" placeholder="粘贴全码到此处..."></textarea>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+        <button class="mode-btn" style="width:100%; margin-bottom:8px;" onclick="downloadAll()">⬇️ 下载备份</button>
+        <textarea id="codeText" class="input-box" style="height:60px;" placeholder="粘贴全码进行导入..."></textarea>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px">
             <button class="mode-btn" onclick="copyFullCode()">复制全码</button>
             <button class="mode-btn" onclick="importFromCode()">代码导入</button>
         </div>
+        <button class="mode-btn" style="width:100%; background:#fff5f5; color:#c53030;" onclick="deleteCurrentUnit()">🗑️ 删除当前单元</button>
     </div>
 
     <div style="text-align:center; color:#6366f1; margin: 20px 0; cursor:pointer; font-weight:bold" onclick="togglePanel('importPanel')">＋ 录入新词</div>
     <div id="importPanel" class="panel">
-        <input type="text" id="unitNameInput" class="input-box" placeholder="单元名称 (不填则添加到当前单元)">
+        <input type="text" id="unitNameInput" class="input-box" placeholder="新单元名称 (留空则追加)">
         <textarea id="importText" class="input-box" style="height:100px" placeholder="dva 2"></textarea>
         <button class="start-btn" style="margin-top:0" onclick="importWords()">确认保存</button>
     </div>
 
     <div id="wordListContainer"></div>
-    <button class="footer-del-btn" onclick="deleteCurrentUnit()">🗑️ 删除当前单元</button>
 </div>
 
 <div id="immersiveOverlay">
     <div id="immHr" class="immersive-word">加载中...</div>
     <div id="immCn" class="immersive-cn"></div>
-    <div class="ctrl-row">
+    <div class="imm-controls">
         <div class="imm-btn" onclick="prevWord()">⏮</div>
-        <div id="immPlayBtn" class="imm-btn" style="background:#0ea5e9" onclick="togglePause()">⏸</div>
+        <div id="immPlayBtn" class="imm-btn active" onclick="togglePause()">⏸</div>
         <div class="imm-btn" onclick="nextWord()">⏭</div>
         <div class="imm-btn" style="color:var(--danger)" onclick="closeImmersive()">✕</div>
     </div>
-    <div class="immersive-tip">🎧 支持锁屏播放<br>如发音停顿，请尝试手动点击暂停/播放</div>
+    <div class="immersive-tip">
+        <b>iPad/安卓 锁屏连播已激活</b><br>
+        如声音停止，请点击中间暂停再播放<br>
+        支持锁屏界面控制进度
+    </div>
 </div>
 
 <div id="challengeOverlay">
@@ -145,24 +201,19 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v56')) || JSON.parse(localStorage.getItem('cro_v55')) || [];
+    // --- 数据加载 (自动兼容旧版本) ---
+    let appData = JSON.parse(localStorage.getItem('cro_v57')) || JSON.parse(localStorage.getItem('cro_v56')) || JSON.parse(localStorage.getItem('cro_v54')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx')) || 0;
     let selectedVoiceURI = localStorage.getItem('cro_selected_voice') || '';
     let voices = [];
 
-    // --- TTS与发动机逻辑 ---
-    let isImmersive = false;
-    let isPaused = false;
-    let playList = [];
-    let playIdx = 0;
-    const engine = document.getElementById('engineAudio');
-
+    // --- 语音引擎加载 ---
     function loadVoices() {
         voices = window.speechSynthesis.getVoices();
         const select = document.getElementById('voiceSelect');
         if(!select) return;
-        select.innerHTML = '<option value="">-- 系统默认 --</option>';
+        select.innerHTML = '<option value="">-- 自动选择 --</option>';
         voices.forEach(v => {
             if (v.lang.includes('hr') || v.lang.includes('HR')) {
                 select.add(new Option(v.name + (v.localService ? ' [本地]' : ''), v.voiceURI));
@@ -178,24 +229,30 @@
         localStorage.setItem('cro_selected_voice', selectedVoiceURI);
     }
 
-    // 全局发音保活变量
-    window.activeUtter = null;
+    // --- 全局发音保活变量 (防止被浏览器垃圾回收) ---
+    window.utterInstance = null;
     function speak(text, lang, callback) {
         window.speechSynthesis.cancel();
         if(isPaused && isImmersive) return;
 
-        window.activeUtter = new SpeechSynthesisUtterance(text);
+        window.utterInstance = new SpeechSynthesisUtterance(text);
         const v = voices.find(i => i.voiceURI === selectedVoiceURI);
-        if(v) window.activeUtter.voice = v;
-        window.activeUtter.lang = lang === 'hr' ? 'hr-HR' : 'zh-CN';
-        window.activeUtter.rate = 1.0;
+        if(v) window.utterInstance.voice = v;
+        window.utterInstance.lang = lang === 'hr' ? 'hr-HR' : 'zh-CN';
+        window.utterInstance.rate = 1.0;
 
-        window.activeUtter.onend = () => { if(callback) callback(); };
-        window.activeUtter.onerror = () => { if(callback) callback(); };
-        window.speechSynthesis.speak(window.activeUtter);
+        window.utterInstance.onend = () => { if(callback) callback(); };
+        window.utterInstance.onerror = () => { if(callback) callback(); };
+        window.speechSynthesis.speak(window.utterInstance);
     }
 
-    // --- 沉浸播放逻辑 ---
+    // --- 沉浸播放核心逻辑 ---
+    let isImmersive = false;
+    let isPaused = false;
+    let playList = [];
+    let playIdx = 0;
+    const engine = document.getElementById('engineAudio');
+
     function openImmersive() {
         const unit = appData[currentUnitIdx];
         if(!unit || unit.words.length === 0) return alert('当前单元为空');
@@ -210,7 +267,7 @@
             playList.push({ type: 'gap', duration: 1200, idx: i });
         });
         playIdx = 0;
-        engine.play().catch(()=>{}); // 启动保活发动机
+        engine.play().catch(()=>{}); // 启动背景保活轨道
         runLoop();
     }
 
@@ -221,16 +278,18 @@
         const item = playList[playIdx];
         const word = appData[currentUnitIdx].words[item.idx];
         
+        // 更新 UI
         document.getElementById('immHr').innerText = word.hr;
         document.getElementById('immCn').innerText = word.cn || '';
 
-        // 高亮单词行
+        // 列表高亮同步
         document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
         const row = document.getElementById(`word-row-${item.idx}`);
         if(row) { row.classList.add('playing-now'); row.scrollIntoView({behavior:'smooth', block:'center'}); }
 
+        // 锁屏控制信息
         if ('mediaSession' in navigator) {
-            navigator.mediaSession.metadata = new MediaMetadata({ title: word.hr, artist: word.cn });
+            navigator.mediaSession.metadata = new MediaMetadata({ title: word.hr, artist: word.cn || '克语助手' });
             navigator.mediaSession.setActionHandler('play', togglePause);
             navigator.mediaSession.setActionHandler('pause', togglePause);
             navigator.mediaSession.setActionHandler('nexttrack', nextWord);
@@ -247,15 +306,22 @@
     function togglePause() {
         isPaused = !isPaused;
         const btn = document.getElementById('immPlayBtn');
-        if(isPaused) { window.speechSynthesis.cancel(); btn.innerText = '▶️'; } 
-        else { btn.innerText = '⏸'; runLoop(); }
+        if(isPaused) { window.speechSynthesis.cancel(); btn.innerText = '▶️'; btn.classList.remove('active'); } 
+        else { btn.innerText = '⏸'; btn.classList.add('active'); runLoop(); }
     }
 
     function nextWord() { window.speechSynthesis.cancel(); let n = playIdx + 1; while(n < playList.length && playList[n].type !== 'hr') n++; playIdx = n >= playList.length ? 0 : n; if(isPaused) togglePause(); else runLoop(); }
     function prevWord() { window.speechSynthesis.cancel(); let p = playIdx - 1; while(p >= 0 && playList[p].type !== 'hr') p--; playIdx = p < 0 ? 0 : p; if(isPaused) togglePause(); else runLoop(); }
     function closeImmersive() { isImmersive = false; window.speechSynthesis.cancel(); engine.pause(); document.getElementById('immersiveOverlay').style.display = 'none'; }
 
-    // --- 核心功能 (导入/导出/挑战) ---
+    // --- 核心数据管理功能 (V54) ---
+    function fixCroText(text) {
+        if (!text) return "";
+        let t = text.normalize('NFC');
+        t = t.replace(/c\s*ˇ/g, "č").replace(/C\s*ˇ/g, "Č").replace(/s\s*ˇ/g, "š").replace(/S\s*ˇ/g, "Š").replace(/z\s*ˇ/g, "ž").replace(/Z\s*ˇ/g, "Ž");
+        return t;
+    }
+
     function render() {
         const list = document.getElementById('wordListContainer');
         const select = document.getElementById('unitSelect');
@@ -269,10 +335,10 @@
             row.className = 'word-row'; row.id = `word-row-${i}`;
             row.innerHTML = `
                 <div class="left-part" onclick="speak('${w.hr.replace(/'/g,"\\'")}', 'hr')">
-                    ${audioIconSvg} <div class="col-hr">${w.hr}</div>
+                    ${audioIconSvg} <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
                 </div>
-                <div class="col-cn">${w.cn}</div>
-                <div class="action-area"><div class="del-word-btn" onclick="delWord(${i})">✕</div></div>
+                <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${w.cn}</div>
+                <div class="action-area"><div class="del-word-btn" onclick="delWord(${i})">✕</div><div class="drag-handle">≡</div></div>
             `;
             list.appendChild(row);
         });
@@ -284,8 +350,8 @@
             try {
                 const data = JSON.parse(e.target.result);
                 appData = [...data, ...appData];
-                saveData(); render(); alert('文件导入成功');
-            } catch(err) { alert('文件格式错误'); }
+                saveData(); render(); alert('导入成功');
+            } catch(err) { alert('文件无效'); }
         };
         reader.readAsText(input.files[0]);
     }
@@ -295,31 +361,47 @@
             const data = JSON.parse(document.getElementById('codeText').value);
             appData = [...data, ...appData];
             saveData(); render(); alert('代码导入成功');
-        } catch(e) { alert('导入代码无效'); }
+        } catch(e) { alert('代码无效'); }
     }
 
     function importWords() {
-        const name = document.getElementById('unitNameInput').value || `新单元 ${appData.length+1}`;
+        const name = document.getElementById('unitNameInput').value || `单元 ${appData.length+1}`;
         const text = document.getElementById('importText').value.trim();
         if(!text) return;
         const newWords = text.split('\n').map(l => {
             let i = l.search(/[\u4e00-\u9fa5|0-9]/);
-            return i!==-1 ? {hr:l.slice(0,i).trim(), cn:l.slice(i).trim()} : {hr:l.trim(), cn:""};
+            return i!==-1 ? {hr:fixCroText(l.slice(0,i).trim()), cn:fixCroText(l.slice(i).trim())} : {hr:fixCroText(l.trim()), cn:""};
         }).filter(w => w.hr);
         appData.push({name, words: newWords});
         saveData(); render(); togglePanel('importPanel');
+        document.getElementById('importText').value = '';
     }
 
-    function delWord(i) { if(confirm('删除此词？')) { appData[currentUnitIdx].words.splice(i,1); saveData(); render(); } }
-    function deleteCurrentUnit() { if(confirm('确定删除整个单元？')) { appData.splice(currentUnitIdx, 1); currentUnitIdx = 0; saveData(); render(); } }
+    function enableEdit(el, idx, field) {
+        el.contentEditable = true; el.focus(); el.onblur = () => {
+            el.contentEditable = false;
+            appData[currentUnitIdx].words[idx][field] = fixCroText(el.innerText);
+            saveData();
+        };
+    }
+
+    function delWord(i) { if(confirm('确定删除？')) { appData[currentUnitIdx].words.splice(i,1); saveData(); render(); } }
+    function deleteCurrentUnit() { if(confirm('⚠️ 确定删除整个单元？')) { appData.splice(currentUnitIdx, 1); currentUnitIdx = 0; saveData(); render(); togglePanel('syncPanel'); } }
     function jumpToUnit() { currentUnitIdx = parseInt(document.getElementById('unitSelect').value); saveData(); render(); }
     function changeUnit(dir) { let n = currentUnitIdx + dir; if(n>=0 && n<appData.length) { currentUnitIdx=n; saveData(); render(); } }
     function togglePanel(id) { const p = document.getElementById(id); p.style.display = p.style.display === 'block' ? 'none' : 'block'; }
-    function saveData() { localStorage.setItem('cro_v56', JSON.stringify(appData)); localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function copyFullCode() { const ta = document.getElementById('codeText'); ta.value = JSON.stringify(appData); ta.select(); document.execCommand('copy'); alert('已复制到剪贴板'); }
-    function downloadAll() { const blob = new Blob([JSON.stringify(appData,null,2)], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cro_words.json'; a.click(); }
+    function saveData() { localStorage.setItem('cro_v57', JSON.stringify(appData)); localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
+    function copyFullCode() { const ta = document.getElementById('codeText'); ta.value = JSON.stringify(appData); ta.select(); document.execCommand('copy'); alert('全码已复制'); }
+    function downloadAll() { const blob = new Blob([JSON.stringify(appData,null,2)], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cro_backup.json'; a.click(); }
+    function goToNotebook() {
+        const idx = appData.findIndex(u => u.name === "📕 错题本");
+        if(idx === -1 && notebook.length === 0) return alert('错题本暂空');
+        if(idx === -1) { appData.unshift({name: "📕 错题本", words: notebook}); currentUnitIdx = 0; }
+        else { appData[idx].words = notebook; currentUnitIdx = idx; }
+        saveData(); render();
+    }
 
-    // --- 挑战模式 ---
+    // --- 挑战模式 (V54 全功能) ---
     let challengeList = [];
     let currentMode = 'quiz';
     function setMode(m) { currentMode = m; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.id==='mode-'+m)); }
@@ -337,12 +419,15 @@
         document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
         speak(current.hr, 'hr');
         
-        if(currentMode === 'quiz' || (currentMode === 'mixed' && Math.random() > 0.5)) {
+        if(currentMode === 'quiz' || (currentMode === 'mixed' && Math.random() > 0.4)) {
             main.innerHTML = `<div style="font-size:28px; margin-bottom:30px; font-weight:bold">${current.hr}</div>`;
             let options = [current, ...appData[currentUnitIdx].words.filter(w=>w!==current).sort(()=>Math.random()-0.5).slice(0,3)].sort(()=>Math.random()-0.5);
             options.forEach(opt => {
                 const btn = document.createElement('div'); btn.className = 'quiz-option'; btn.innerText = opt.cn;
-                btn.onclick = () => { if(opt===current) { btn.classList.add('correct'); setTimeout(() => { challengeList.shift(); showQuestion(); }, 500); } else btn.classList.add('wrong'); };
+                btn.onclick = () => { 
+                    if(opt===current) { btn.classList.add('correct'); setTimeout(() => { challengeList.shift(); showQuestion(); }, 500); } 
+                    else { btn.classList.add('wrong'); addToNotebook(current); }
+                };
                 main.appendChild(btn);
             });
         } else if (currentMode === 'match') {
@@ -355,29 +440,35 @@
                 const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t;
                 div.onclick = () => {
                     if(div.classList.contains('match-correct')) return;
-                    div.classList.add('selected');
+                    div.style.borderColor = "#6366f1";
                     if(!first) first = {div, item};
                     else {
                         if(first.item.id === item.id && first.item.type !== item.type) {
                             first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct';
                             if(grid.querySelectorAll('.match-correct').length === sub.length*2) { setTimeout(()=>{ challengeList.splice(0,4); showQuestion(); }, 600); }
-                        } else { first.div.classList.remove('selected'); div.classList.remove('selected'); }
+                        } else { first.div.style.borderColor = "#f0f0f0"; div.style.borderColor = "#f0f0f0"; addToNotebook(challengeList.find(c=>c.hr===item.id)); }
                         first = null;
                     }
                 };
                 grid.appendChild(div);
             });
         } else {
-            main.innerHTML = `<div style="font-size:24px; margin-bottom:20px">${current.cn}</div><input type="text" id="spellInp" class="spelling-input" placeholder="输入克语..."><button class="start-btn" onclick="checkSpell()">提交</button>`;
+            main.innerHTML = `
+                <div style="font-size:24px; margin-bottom:20px">${current.cn}</div>
+                <input type="text" id="spellInp" class="spelling-input" placeholder="输入克语..." autocomplete="off">
+                <div class="special-chars">${['č','ć','đ','š','ž'].map(c=>`<div class="char-btn" onclick="document.getElementById('spellInp').value+='${c}'">${c}</div>`).join('')}</div>
+                <button class="start-btn" onclick="checkSpell()">提交</button>
+            `;
             document.getElementById('spellInp').focus();
         }
     }
     window.checkSpell = () => {
         const inp = document.getElementById('spellInp'); const cur = challengeList[0];
-        if(inp.value.trim().toLowerCase() === cur.hr.toLowerCase()) { challengeList.shift(); showQuestion(); } else alert('错误，正确答案: ' + cur.hr);
+        if(inp.value.trim().toLowerCase() === cur.hr.toLowerCase()) { challengeList.shift(); showQuestion(); } 
+        else { alert('错误，答案: ' + cur.hr); addToNotebook(cur); }
     };
+    function addToNotebook(w) { if(!notebook.some(n=>n.hr===w.hr)) { notebook.push(w); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } }
     function exitChallenge() { document.getElementById('challengeOverlay').style.display = 'none'; }
-    function goToNotebook() { alert('请通过选择单元切换至错题本'); }
 
     if(appData.length > 0) render();
 </script>
