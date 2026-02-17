@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V43.1 (稳定防封版)</title>
+    <title>克语助手 V44 (智能双引擎版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -130,7 +130,6 @@
         .char-btn:active { background: #4f46e5; color: white; }
         .spelling-feedback { min-height: 24px; margin-bottom: 15px; font-weight: bold; }
 
-        /* 沉浸模式样式 */
         #immersiveOverlay {
             display: none; position: fixed; inset: 0; background: #000; z-index: 3000;
             color: #fff; flex-direction: column; align-items: center; justify-content: center;
@@ -144,15 +143,14 @@
             cursor: pointer; border: 2px solid #555;
         }
         .immersive-tip { position: absolute; bottom: 40px; font-size: 12px; color: #444; }
-        /* 错误提示 */
-        #errorTip { color: #ff6b6b; font-size: 14px; margin-bottom: 10px; display: none;}
+        #errorTip { color: #fcd34d; font-size: 14px; margin-bottom: 10px; display: none;}
     </style>
 </head>
 <body>
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V43.1</h1>
+        <h1>🇭🇷 克语助手 V44</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -209,11 +207,11 @@
 </div>
 
 <div id="immersiveOverlay">
-    <div id="errorTip">⚠️ 播放受限，建议切换 4G/Wi-Fi 网络</div>
+    <div id="errorTip">🌐 网络受限，已自动切换为本地语音引擎</div>
     <div id="immHr" class="immersive-word">准备播放...</div>
     <div id="immCn" class="immersive-cn"></div>
     <div class="immersive-ctrl" onclick="stopImmersiveMode()">⏹</div>
-    <div class="immersive-tip">已开启防息屏模式，请勿按电源键锁屏<br>直接放入口袋即可</div>
+    <div class="immersive-tip">已开启防息屏 + 智能双引擎<br>网络不通时将使用手机自带发音</div>
 </div>
 
 <audio id="audioPlayer" playsinline></audio>
@@ -221,7 +219,7 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    let appData = JSON.parse(localStorage.getItem('cro_v43_1')) || JSON.parse(localStorage.getItem('cro_v43')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v44')) || JSON.parse(localStorage.getItem('cro_v43_1')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
@@ -230,22 +228,21 @@
     let challengeList = [];
     const audioPlayer = document.getElementById('audioPlayer');
     
-    // 监听全局错误，捕获播放失败
+    // --- 核心变量：是否强制使用本地引擎 ---
+    let forceLocalTTS = false; 
+
+    // 监听网络播放错误，自动切换到本地
     audioPlayer.onerror = function() {
-        console.log('Audio Error', audioPlayer.error);
+        console.log('Google API Error, switching to local.');
+        forceLocalTTS = true; 
         if(isImmersive) {
             document.getElementById('errorTip').style.display = 'block';
-            // 失败后尝试跳过，2秒后继续
-            setTimeout(() => {
-                playQueueIndex++;
-                processQueue();
-            }, 2000);
+            // 稍后重试当前项（会自动走本地逻辑）
+            setTimeout(() => { processQueue(); }, 500);
         }
     };
 
     let dragEl = null; let pressTimer = null; let isDragActive = false; let startY = 0;
-
-    // --- 沉浸模式变量 ---
     let isImmersive = false;
     let playQueue = []; 
     let playQueueIndex = 0;
@@ -282,7 +279,7 @@
             const safeHr = fixCroText(w.hr); const safeCn = fixCroText(w.cn);
             row.innerHTML = `
                 <div class="left-part">
-                    <span onclick="simplePlay('${safeHr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}')">${audioIconSvg}</span>
+                    <span onclick="playSingleItem('${safeHr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">${audioIconSvg}</span>
                     <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${safeHr}</div>
                 </div>
                 <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${safeCn}</div>
@@ -301,10 +298,68 @@
         });
     }
 
-    // --- 沉浸式听力逻辑 (V43.1 防封版) ---
-    async function requestWakeLock() {
-        try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (err) { console.log(err); }
+    // --- 智能双引擎播放系统 ---
+    
+    // 统一播放入口：自动判断用网络还是本地
+    function playSmart(text, lang, onEndCallback) {
+        if (!text) { if(onEndCallback) onEndCallback(); return; }
+
+        // 1. 如果已标记为强制本地，或网络不可用，直接用本地
+        if (forceLocalTTS || !navigator.onLine) {
+            speakLocal(text, lang, onEndCallback);
+            return;
+        }
+
+        // 2. 尝试网络播放
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=gtx`;
+        audioPlayer.src = url;
+        audioPlayer.playbackRate = (lang === 'zh-CN') ? 1.1 : 1.0;
+        
+        // 设置回调
+        audioPlayer.onended = () => { if(onEndCallback) onEndCallback(); };
+        
+        // 播放，如果失败（被封或网络错），会触发全局 onerror，然后由 onerror 里的逻辑接管
+        const playPromise = audioPlayer.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log("Network play failed, fallback to local.");
+                forceLocalTTS = true; // 标记后续都用本地
+                if(isImmersive) document.getElementById('errorTip').style.display = 'block';
+                speakLocal(text, lang, onEndCallback); // 立即切换
+            });
+        }
     }
+
+    // 本地引擎 (Web Speech API)
+    function speakLocal(text, lang, onEndCallback) {
+        // 取消正在说的
+        window.speechSynthesis.cancel();
+
+        const u = new SpeechSynthesisUtterance(text);
+        // 映射语言代码
+        if (lang === 'hr') u.lang = 'hr-HR';
+        else if (lang === 'zh-CN') u.lang = 'zh-CN';
+        
+        u.rate = 0.9; // 本地语速微调
+        
+        u.onend = () => { if(onEndCallback) onEndCallback(); };
+        u.onerror = (e) => { 
+            console.log('Local TTS Error', e); 
+            if(onEndCallback) onEndCallback(); // 即使出错也继续下一项
+        };
+        
+        window.speechSynthesis.speak(u);
+    }
+
+    // 单点播放
+    function playSingleItem(text, lang) {
+        if(isImmersive) return;
+        // 单点播放不需要回调
+        playSmart(text, lang, null);
+    }
+
+    // --- 沉浸式逻辑 ---
+    async function requestWakeLock() { try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (err) {} }
 
     function startImmersiveMode() {
         const unit = appData[currentUnitIdx];
@@ -312,8 +367,11 @@
         
         isImmersive = true;
         document.getElementById('immersiveOverlay').style.display = 'flex';
-        document.getElementById('errorTip').style.display = 'none'; // 重置错误提示
+        document.getElementById('errorTip').style.display = forceLocalTTS ? 'block' : 'none';
         requestWakeLock();
+
+        // 播放空声音激活 AudioContext (对iOS重要)
+        audioPlayer.src = ""; audioPlayer.play().catch(()=>{});
 
         // 构建队列
         playQueue = [];
@@ -335,11 +393,11 @@
         isImmersive = false;
         document.getElementById('immersiveOverlay').style.display = 'none';
         audioPlayer.pause();
+        window.speechSynthesis.cancel(); // 停止本地语音
         if (wakeLock) { wakeLock.release(); wakeLock = null; }
         document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
     }
 
-    // 核心修改：单线程播放，去除预加载，防止频率过高
     function processQueue() {
         if (!isImmersive) return;
         if (playQueueIndex >= playQueue.length) {
@@ -353,7 +411,6 @@
         if (item.uiHr) {
             document.getElementById('immHr').innerText = item.uiHr;
             document.getElementById('immCn').innerText = item.uiCn;
-            // 列表高亮同步
             if(item.rowIndex !== undefined) {
                 document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
                 const row = document.getElementById(`word-row-${item.rowIndex}`);
@@ -367,37 +424,15 @@
                 processQueue();
             }, item.ms);
         } else if (item.type === 'audio') {
-            // 播放
-            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(item.text)}&tl=${item.lang}&client=gtx`;
-            audioPlayer.src = url;
-            audioPlayer.playbackRate = (item.lang === 'zh-CN') ? 1.1 : 1.0;
-            
-            // 播放 Promise
-            const playPromise = audioPlayer.play();
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    // 播放成功，设置结束回调
-                    audioPlayer.onended = () => {
-                        playQueueIndex++;
-                        processQueue(); // 递归调用下一项
-                    };
-                }).catch(error => {
-                    console.log("AutoPlay blocked or failed:", error);
-                    // 失败也跳过，防止卡死
-                    playQueueIndex++;
-                    processQueue();
-                });
-            }
+            // 使用双引擎播放
+            playSmart(item.text, item.lang, () => {
+                playQueueIndex++;
+                processQueue();
+            });
         }
     }
 
-    function simplePlay(t) { 
-        if(isImmersive) return; 
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(t)}&tl=hr&client=gtx`;
-        audioPlayer.src = url; audioPlayer.onended = null; audioPlayer.play(); 
-    }
-
-    // --- 其他逻辑保持不变 ---
+    // --- 其他功能保持不变 ---
     function jumpToUnit() { currentUnitIdx = parseInt(document.getElementById('unitSelect').value); exitNotebookMode(); saveState(); render(); }
     function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; exitNotebookMode(); saveState(); render(); } }
     function goToNotebook() { 
@@ -409,7 +444,7 @@
     }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function saveData() { localStorage.setItem('cro_v43_1', JSON.stringify(appData)); saveState(); }
+    function saveData() { localStorage.setItem('cro_v44', JSON.stringify(appData)); saveState(); }
 
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
@@ -438,7 +473,7 @@
         if(challengeList.length === 0) { alert("恭喜！复习完成"); return exitChallenge(); }
         const main = document.getElementById('challengeMain'); main.innerHTML = ''; document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
         const current = challengeList[0];
-        if(document.getElementById('autoVoice').checked) simplePlay(current.hr);
+        if(document.getElementById('autoVoice').checked) playSmart(current.hr, 'hr', null);
         let displayMode = currentMode;
         if (currentMode === 'mixed') { const r = Math.random(); if (challengeList.length >= 4 && r < 0.3) displayMode = 'match'; else if (r < 0.65) displayMode = 'quiz'; else displayMode = 'spell'; }
         if(displayMode === 'quiz') {
@@ -451,10 +486,10 @@
             const num = Math.min(challengeList.length, 4); const currentBatch = challengeList.slice(0, num);
             const items = [...currentBatch.map(s => ({t: s.hr, id: s.hr, type:'hr'})), ...currentBatch.map(s => ({t: s.cn, id: s.hr, type:'cn'}))].sort(() => Math.random() - 0.5);
             main.innerHTML = `<div class="match-grid"></div>`; const grid = main.querySelector('.match-grid'); let first = null; let matchedCount = 0;
-            items.forEach(item => { const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t; div.onclick = () => { if(div.classList.contains('hidden') || div.classList.contains('match-correct')) return; if(item.type === 'hr') simplePlay(item.t); div.classList.add('selected'); if(!first) { first = {div, item}; } else { if(first.div === div) return; if(first.item.id === item.id) { first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; const fDiv = first.div; const sDiv = div; setTimeout(() => { fDiv.classList.add('hidden'); sDiv.classList.add('hidden'); if(matchedCount === num) { challengeList.splice(0, num); showQuestion(); } }, 400); } else { div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id || c.hr === first.item.id)); const fDiv = first.div; const sDiv = div; setTimeout(() => { sDiv.className = 'match-item'; fDiv.className = 'match-item'; }, 500); } first = null; } }; grid.appendChild(div); });
+            items.forEach(item => { const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t; div.onclick = () => { if(div.classList.contains('hidden') || div.classList.contains('match-correct')) return; if(item.type === 'hr') playSmart(item.t, 'hr', null); div.classList.add('selected'); if(!first) { first = {div, item}; } else { if(first.div === div) return; if(first.item.id === item.id) { first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; const fDiv = first.div; const sDiv = div; setTimeout(() => { fDiv.classList.add('hidden'); sDiv.classList.add('hidden'); if(matchedCount === num) { challengeList.splice(0, num); showQuestion(); } }, 400); } else { div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id || c.hr === first.item.id)); const fDiv = first.div; const sDiv = div; setTimeout(() => { sDiv.className = 'match-item'; fDiv.className = 'match-item'; }, 500); } first = null; } }; grid.appendChild(div); });
         }
         else if (displayMode === 'spell') {
-            main.innerHTML = `<div class="spelling-container"><div style="font-size:24px; color:#333; margin-bottom:20px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div><div id="spellFeedback" class="spelling-feedback"></div><input type="text" id="spellInput" class="spelling-input" placeholder="输入克语 (听写)" autocomplete="off"><div class="special-chars">${['č','ć','đ','š','ž'].map(c => `<div class="char-btn" onclick="typeChar('${c}')">${c}</div>`).join('')}</div><button class="start-btn" onclick="checkSpelling()">提交验证</button><div style="margin-top:20px; color:#666; font-size:14px" onclick="simplePlay('${current.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}')">🔊 重听</div></div>`;
+            main.innerHTML = `<div class="spelling-container"><div style="font-size:24px; color:#333; margin-bottom:20px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div><div id="spellFeedback" class="spelling-feedback"></div><input type="text" id="spellInput" class="spelling-input" placeholder="输入克语 (听写)" autocomplete="off"><div class="special-chars">${['č','ć','đ','š','ž'].map(c => `<div class="char-btn" onclick="typeChar('${c}')">${c}</div>`).join('')}</div><button class="start-btn" onclick="checkSpelling()">提交验证</button><div style="margin-top:20px; color:#666; font-size:14px" onclick="playSmart('${current.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr', null)">🔊 重听</div></div>`;
             const input = document.getElementById('spellInput'); input.focus(); input.onkeydown = (e) => { if(e.key === 'Enter') checkSpelling(); };
         }
     }
