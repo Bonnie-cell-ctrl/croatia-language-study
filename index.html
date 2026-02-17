@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V58 </title>
+    <title>克语助手 V59 </title>
     <style>
         :root {
             --primary: #0056b3;
@@ -88,7 +88,7 @@
         .panel { display: none; background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .input-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
         
-        /* V58 新增：管理面板 Grid 布局 */
+        /* 管理面板 Grid 布局 */
         .tool-grid {
             display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 15px;
         }
@@ -138,7 +138,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V58</h1>
+        <h1>🇭🇷 克语助手 V59</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -190,7 +190,6 @@
     </div>
 
     <div id="wordListContainer"></div>
-    <button class="footer-del-btn" onclick="deleteCurrentUnit()">🗑️ 删除当前单元</button>
 </div>
 
 <div id="immersiveOverlay">
@@ -202,7 +201,7 @@
         <div class="imm-btn" onclick="nextWord()">⏭</div>
         <div class="imm-btn" style="color:var(--danger)" onclick="closeImmersive()">✕</div>
     </div>
-    <div class="immersive-tip">🎧 锁屏防断连版<br>若锁屏停止，请点亮屏幕按暂停再播放</div>
+    <div class="immersive-tip">🎧 锁屏后台保活版<br>支持锁屏控制进度</div>
 </div>
 
 <div id="challengeOverlay">
@@ -219,7 +218,7 @@
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
     // 数据加载
-    let appData = JSON.parse(localStorage.getItem('cro_v58')) || JSON.parse(localStorage.getItem('cro_v54_5')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v59')) || JSON.parse(localStorage.getItem('cro_v58')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx')) || 0;
     let selectedVoiceURI = localStorage.getItem('cro_selected_voice') || '';
@@ -247,8 +246,6 @@
     }
 
     // --- 核心播放逻辑：音频链条 (Audio Chain) ---
-    // 逻辑：Speak -> OnEnd -> GapAudio.Play -> OnEnded -> Speak ...
-    // 这种链条全程都是 Media Event，系统不会杀后台
     
     window.utterInstance = null;
     const gapAudio = document.getElementById('gapAudio');
@@ -277,7 +274,7 @@
             }
         };
         
-        // 错误兜底
+        // 错误兜底：如果TTS失败，直接走Gap，防止卡死
         window.utterInstance.onerror = () => {
             if (isImmersive && !isPaused) playGap();
         };
@@ -285,18 +282,27 @@
         window.speechSynthesis.speak(window.utterInstance);
     }
 
-    // 2. 播放间隔 (充当保活)
+    // 2. 播放间隔 (充当保活 + 延迟)
     function playGap() {
         if (!isImmersive || isPaused) return;
         
         // 重置音频并播放
         gapAudio.currentTime = 0;
-        gapAudio.playbackRate = 0.5; // 变慢以延长停顿时间 (约1-1.5s)
-        gapAudio.play().catch(e => {
-            console.log("Gap play failed:", e);
-            // 极低概率：如果音频播放失败，尝试硬切下一个
-            nextStep();
-        });
+        gapAudio.playbackRate = 0.5; // 变慢以延长停顿时间
+        
+        // 关键修复：防止 play() 失败导致死循环
+        const playPromise = gapAudio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(e => {
+                console.log("Gap play failed:", e);
+                // 如果音频播放失败（极罕见），强制延时 1s 后跳下一个
+                // 这里必须增加 index，否则会死循环播放同一个词！
+                setTimeout(() => {
+                    playQueueIndex++; 
+                    nextStep(); 
+                }, 1000);
+            });
+        }
     }
 
     // 监听间隔播放结束 -> 下一步
@@ -313,13 +319,10 @@
         
         updateUI(item);
         
-        // 核心：所有步骤统一处理
         if(item.type === 'delay') {
-            // 如果是纯延时项，直接播放Gap
-            playGap();
+            playGap(); // 如果是纯延时项，直接播放Gap
         } else {
-            // 如果是单词，朗读
-            speakStep(item);
+            speakStep(item); // 朗读
         }
     }
 
@@ -328,7 +331,6 @@
             document.getElementById('immHr').innerText = item.uiHr;
             document.getElementById('immCn').innerText = item.uiCn;
             
-            // 锁屏信息更新
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.metadata = new MediaMetadata({ title: item.uiHr, artist: item.uiCn });
             }
@@ -370,13 +372,10 @@
             const cnText = w.cn ? w.cn.normalize('NFC').replace(/[\r\n]+/g, " ") : "";
             playQueue.push({ type: 'speak', text: hrText, lang: 'hr', uiHr: hrText, uiCn: cnText, rowIndex: idx });
             if (cnText) playQueue.push({ type: 'speak', text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
-            // 注意：V58 不需要显式的 'delay' type 来做 settimeout，而是利用 gapAudio
-            // 但为了兼容逻辑，我们可以插入一个标记，或者直接在 speakStep 后接 playGap
         });
 
         playQueueIndex = 0;
-        // 启动链条
-        nextStep();
+        nextStep(); // 启动
     }
 
     function togglePause() {
@@ -388,8 +387,7 @@
             btn.innerText = '▶️'; btn.classList.remove('active');
         } else {
             btn.innerText = '⏸'; btn.classList.add('active');
-            // 恢复播放：根据当前停在哪里决定
-            // 简单处理：直接重新读当前项
+            // 恢复播放：直接重新读当前项，简单可靠
             nextStep();
         }
     }
@@ -470,7 +468,7 @@
     function jumpToUnit() { currentUnitIdx = parseInt(document.getElementById('unitSelect').value); saveData(); render(); }
     function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; saveData(); render(); } }
     function togglePanel(id) { const p = document.getElementById(id); p.style.display = p.style.display === 'block' ? 'none' : 'block'; }
-    function saveData() { localStorage.setItem('cro_v58', JSON.stringify(appData)); localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
+    function saveData() { localStorage.setItem('cro_v59', JSON.stringify(appData)); localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
     function enableEdit(el, idx, field) { el.contentEditable = true; el.focus(); el.classList.add('editing'); el.onblur = () => { el.contentEditable = false; el.classList.remove('editing'); appData[currentUnitIdx].words[idx][field] = el.innerText; saveData(); }; }
     function importWords() {
         let name = document.getElementById('unitNameInput').value.trim(); const text = document.getElementById('importText').value.trim(); const after = parseInt(document.getElementById('insertAfterSelect').value);
@@ -487,7 +485,7 @@
     function downloadAll() { const b = new Blob([JSON.stringify(appData,null,2)], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'cro_backup.json'; a.click(); }
     function goToNotebook() { if(notebook.length===0) return alert('空'); const idx = appData.findIndex(u=>u.name==="📕 错题本"); if(idx===-1) { appData.unshift({name:"📕 错题本", words:notebook}); currentUnitIdx=0; } else { appData[idx].words=notebook; currentUnitIdx=idx; } saveData(); render(); }
     
-    // 挑战模式 (V54)
+    // 挑战模式
     let currentMode = 'quiz'; let challengeList = [];
     function setMode(m) { currentMode = m; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.id==='mode-'+m)); }
     function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; speakSingle(' ', 'hr'); challengeList = [...unit.words].sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
@@ -529,7 +527,7 @@
                 grid.appendChild(div);
             });
         } else {
-            main.innerHTML = `<div style="font-size:24px; margin-bottom:20px">${current.cn}</div><input id="spellInp" class="spelling-input"><div class="special-chars">${['č','ć','đ','š','ž'].map(c=>`<div class="char-btn" onclick="document.getElementById('spellInp').value+='${c}'">${c}</div>`).join('')}</div><button class="start-btn" onclick="checkSpell()">提交</button>`;
+            main.innerHTML = `<div style="font-size:24px; margin-bottom:20px">${current.cn}</div><input id="spellInp" class="spelling-input" autocomplete="off"><div class="special-chars">${['č','ć','đ','š','ž'].map(c=>`<div class="char-btn" onclick="document.getElementById('spellInp').value+='${c}'">${c}</div>`).join('')}</div><button class="start-btn" onclick="checkSpell()">提交</button>`;
             document.getElementById('spellInp').focus();
         }
     }
