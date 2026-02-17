@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V51 (本地引擎终极版)</title>
+    <title>克语助手 V52 (后台保活版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -152,7 +152,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V51 (本地引擎)</h1>
+        <h1>🇭🇷 克语助手 V52 (后台保活)</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -185,11 +185,9 @@
             <button class="mode-btn" onclick="copyFullCode()">复制全码</button>
             <button class="mode-btn" onclick="importFromCode()">代码导入</button>
         </div>
-        
         <div id="voice-picker-container">
             <label style="font-size:12px; color:#555;">🗣️ 选择克语发音 (请选 Google Croatian):</label>
             <select id="voiceSelect" onchange="saveVoiceSelection()"></select>
-            <div style="font-size:10px; color:#999; margin-top:5px;">* 如果没找到 Google 选项，请重启浏览器</div>
         </div>
     </div>
 
@@ -218,15 +216,18 @@
     <div id="immHr" class="immersive-word">准备播放...</div>
     <div id="immCn" class="immersive-cn"></div>
     <div class="immersive-ctrl" onclick="stopImmersiveMode()">⏹</div>
-    <div class="immersive-tip">🚀 纯本地引擎模式<br>0流量 | 0延迟 | 永不封号</div>
+    <div class="immersive-tip">🎵 后台广播模式<br>支持锁屏/后台播放，请勿清理后台</div>
 </div>
 
-<audio id="iosSilentPlayer" src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASAAAAAAAASAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA" playsinline></audio>
+<audio id="silentDriver" playsinline></audio>
 
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+    
+    // 静音MP3，用于充当"心跳"
+    const SILENT_MP3 = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASAAAAAAAASAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA';
 
-    let appData = JSON.parse(localStorage.getItem('cro_v51')) || JSON.parse(localStorage.getItem('cro_v50')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v52')) || JSON.parse(localStorage.getItem('cro_v51')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
@@ -239,100 +240,82 @@
         availableVoices = window.speechSynthesis.getVoices();
         const select = document.getElementById('voiceSelect');
         select.innerHTML = '<option value="">-- 系统默认 --</option>';
-        
-        // 优先显示克罗地亚语
         let foundHr = false;
         availableVoices.forEach(voice => {
             const label = `${voice.name} (${voice.lang})`;
-            // 过滤：只显示克语，或者包含 Google 的（方便找）
-            // 如果列表太长，用户找不到，这里我们把所有包含 'hr' 或 'Croatian' 的置顶
             if (voice.lang.includes('hr') || voice.name.includes('Croatian') || voice.name.includes('Hrvatski')) {
                 const opt = new Option("🌟 " + label, voice.voiceURI);
                 select.add(opt);
                 foundHr = true;
             }
         });
-
-        // 如果没找到克语，显示全部 Google 语音供尝试
         if(!foundHr) {
-            const opt = new Option("--- 以下为全部语音 ---", "");
-            opt.disabled = true; select.add(opt);
-            availableVoices.forEach(voice => {
-                select.add(new Option(voice.name, voice.voiceURI));
-            });
+            const opt = new Option("--- 全部语音 ---", ""); opt.disabled = true; select.add(opt);
+            availableVoices.forEach(voice => { select.add(new Option(voice.name, voice.voiceURI)); });
         }
-
-        // 恢复选中状态
         if (selectedVoiceURI) select.value = selectedVoiceURI;
-        
-        // 自动帮用户选中 Google Croatian (如果还没选过)
         if (!selectedVoiceURI && foundHr) {
             for (let i=0; i<select.options.length; i++) {
                 if (select.options[i].text.includes('Google')) {
-                    select.selectedIndex = i;
-                    saveVoiceSelection();
-                    break;
+                    select.selectedIndex = i; saveVoiceSelection(); break;
                 }
             }
         }
     }
-
-    // 监听语音列表加载（Android/Chrome 需要这个）
     window.speechSynthesis.onvoiceschanged = loadVoices;
-    // 首次尝试加载
     setTimeout(loadVoices, 500);
 
     function saveVoiceSelection() {
         selectedVoiceURI = document.getElementById('voiceSelect').value;
         localStorage.setItem('cro_selected_voice', selectedVoiceURI);
-        // 试听一下
         speakLocal('Dobar dan', 'hr');
     }
 
     function speakLocal(text, lang, onEndCallback) {
         window.speechSynthesis.cancel();
-        
         const u = new SpeechSynthesisUtterance(text);
-        
-        // 核心：指定发音人
         if (lang === 'hr' && selectedVoiceURI) {
             const voice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
             if (voice) u.voice = voice;
         }
-        
-        // 语言回退
-        if (lang === 'hr') u.lang = 'hr-HR';
-        else if (lang === 'zh-CN') u.lang = 'zh-CN';
-        
-        // 速率
+        if (lang === 'hr') u.lang = 'hr-HR'; else if (lang === 'zh-CN') u.lang = 'zh-CN';
         u.rate = 1.0; 
-        
         u.onend = () => { if(onEndCallback) onEndCallback(); };
-        u.onerror = (e) => { 
-            console.log('TTS Error', e); 
-            if(onEndCallback) onEndCallback(); 
-        };
-        
+        u.onerror = (e) => { console.log('TTS Error', e); if(onEndCallback) onEndCallback(); };
         window.speechSynthesis.speak(u);
     }
 
-    // --- 沉浸式逻辑 ---
+    // --- 🎧 沉浸式逻辑 (核心修改：使用 Audio Event 驱动) ---
     let isImmersive = false;
     let playQueue = [];
     let playQueueIndex = 0;
-    let wakeLock = null;
+    const silentDriver = document.getElementById('silentDriver');
 
-    async function requestWakeLock() { try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (err) {} }
+    // 监听静音播放器的结束事件，以此来驱动下一个动作
+    // 这比 setTimeout 靠谱，因为 audio 事件在后台也会触发
+    silentDriver.onended = function() {
+        if (!isImmersive) return;
+        // 如果刚刚播完的是 delay (静音)，那么现在该播下一个词了
+        playQueueIndex++;
+        processQueue();
+    };
 
     function startImmersiveMode() {
         const unit = appData[currentUnitIdx];
         if (!unit || unit.words.length === 0) return alert('当前单元没有单词');
         isImmersive = true;
         document.getElementById('immersiveOverlay').style.display = 'flex';
-        requestWakeLock();
         
-        // 播放静音激活 iOS
-        document.getElementById('iosSilentPlayer').play().catch(()=>{});
+        // 更新锁屏媒体信息 (Media Session API)
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: '克语听力复习',
+                artist: unit.name,
+                album: 'Cro Helper'
+            });
+            navigator.mediaSession.setActionHandler('play', () => {});
+            navigator.mediaSession.setActionHandler('pause', stopImmersiveMode);
+        }
 
         playQueue = [];
         unit.words.forEach((w, idx) => {
@@ -344,30 +327,51 @@
             }
             playQueue.push({ type: 'delay' });
         });
+        
+        // 重置播放器并开始
         playQueueIndex = 0;
-        processQueue();
+        // 先播放一个极短的静音来激活 AudioContext
+        silentDriver.src = SILENT_MP3;
+        silentDriver.loop = false;
+        silentDriver.play().then(() => {
+            // 这里不通过 onended 触发，而是手动开始第一次 process
+            // 因为第一次点击往往是在前台
+            processQueue();
+        }).catch(() => {
+            alert("请点击允许播放音频");
+            processQueue();
+        });
     }
 
     function stopImmersiveMode() {
         isImmersive = false;
         document.getElementById('immersiveOverlay').style.display = 'none';
         window.speechSynthesis.cancel();
-        if (wakeLock) { wakeLock.release(); wakeLock = null; }
+        silentDriver.pause();
         document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
     }
 
     function processQueue() {
         if (!isImmersive) return;
         if (playQueueIndex >= playQueue.length) {
-            stopImmersiveMode();
-            return alert('播放完成');
+            // 循环播放
+            playQueueIndex = 0;
+            // return alert('播放完成'); // 如果不想循环，取消注释这行
         }
 
         const item = playQueue[playQueueIndex];
 
+        // 更新 UI (锁屏界面也会尝试更新)
         if (item.uiHr) {
             document.getElementById('immHr').innerText = item.uiHr;
             document.getElementById('immCn').innerText = item.uiCn;
+            
+            // 更新锁屏信息
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata.title = item.uiHr;
+                navigator.mediaSession.metadata.artist = item.uiCn;
+            }
+
             if(item.rowIndex !== undefined) {
                 document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
                 const row = document.getElementById(`word-row-${item.rowIndex}`);
@@ -379,21 +383,38 @@
         }
 
         if (item.type === 'delay') {
-            // 接力：iOS 需要音频持续
-            const silent = document.getElementById('iosSilentPlayer');
-            silent.currentTime = 0;
-            silent.onended = () => { playQueueIndex++; processQueue(); };
-            silent.play().catch(() => setTimeout(() => { playQueueIndex++; processQueue(); }, 1000));
+            // 播放 1.2 秒的静音，作为间隔
+            // 注意：因为 SILENT_MP3 本身只有 0.5s 左右，我们需要变慢播放速度来延长时间
+            // 或者 loop 几次。这里我们简单处理：播放一次
+            silentDriver.src = SILENT_MP3;
+            silentDriver.playbackRate = 0.4; // 变慢以增加延迟
+            silentDriver.play();
+            // 当这个静音播完时，onended 会触发 processQueue (index+1)
 
         } else if (item.type === 'speak') {
+            // 朗读时，为了防止后台杀进程，我们也让 silentDriver 保持播放状态（无限循环）
+            // 但声音极小或静音
+            // 这里我们用一个 trick：Speak 是同步发起的，但我们需要 Speak 完成后才继续
+            
+            // 1. 播放一个无限长的静音来保活
+            silentDriver.src = SILENT_MP3; 
+            silentDriver.loop = true;
+            silentDriver.play().catch(()=>{});
+
             speakLocal(item.text, item.lang, () => {
+                // 2. Speak 结束了
+                // 停止保活静音
+                silentDriver.pause();
+                silentDriver.loop = false;
+                
+                // 手动触发下一步
                 playQueueIndex++;
                 processQueue();
             });
         }
     }
 
-    // --- 常规 ---
+    // --- 常规功能 (不变) ---
     let dragEl = null; let pressTimer = null; let isDragActive = false; let startY = 0;
     
     function fixCroText(text) {
@@ -449,7 +470,7 @@
     function goToNotebook() { if(notebook.length===0) return alert('空'); localStorage.setItem('cro_viewing_notebook', 'true'); const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); currentUnitIdx = (idx > -1) ? idx : 0; saveState(); render(); }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveState() { localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
-    function saveData() { localStorage.setItem('cro_v51', JSON.stringify(appData)); saveState(); }
+    function saveData() { localStorage.setItem('cro_v52', JSON.stringify(appData)); saveState(); }
     function handleTouchStart(e) { startY = e.touches[0].clientY; const handle = this; const row = handle.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); handle.classList.add('active'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
     function handleTouchEnd(e) { clearTimeout(pressTimer); if (isDragActive) stopDragging(); isDragActive = false; }
