@@ -118,7 +118,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V54.5 </h1>
+        <h1>🇭🇷 克语助手 V54.5 (</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -197,7 +197,7 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    // 数据加载
+    // 数据加载 (兼容旧版数据)
     let appData = JSON.parse(localStorage.getItem('cro_v54_5')) || JSON.parse(localStorage.getItem('cro_v54')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
@@ -265,7 +265,7 @@
         document.getElementById('playPauseBtn').innerText = '⏸';
         document.getElementById('playPauseBtn').classList.add('active');
         requestWakeLock();
-        bgMusic.play().catch(()=>{}); // 启动后台静音轨道
+        bgMusic.play().catch(()=>{});
 
         playQueue = [];
         unit.words.forEach((w, idx) => {
@@ -314,11 +314,6 @@
         const item = playQueue[playQueueIndex];
         if (item.uiHr) {
             document.getElementById('immHr').innerText = item.uiHr; document.getElementById('immCn').innerText = item.uiCn;
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = new MediaMetadata({ title: item.uiHr, artist: item.uiCn });
-                navigator.mediaSession.setActionHandler('play', togglePause); navigator.mediaSession.setActionHandler('pause', togglePause);
-                navigator.mediaSession.setActionHandler('nexttrack', nextWord); navigator.mediaSession.setActionHandler('previoustrack', prevWord);
-            }
             if(item.rowIndex !== undefined) {
                 document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
                 const row = document.getElementById(`word-row-${item.rowIndex}`);
@@ -379,7 +374,21 @@
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveData() { localStorage.setItem('cro_v54_5', JSON.stringify(appData)); localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
 
-    function enableEdit(el, idx, field) { el.contentEditable = true; el.focus(); el.classList.add('editing'); el.onblur = () => { el.contentEditable = false; el.classList.remove('editing'); appData[currentUnitIdx].words[idx][field] = el.innerText; saveData(); }; }
+    // 核心修复1: 双击编辑时同步更新错题本底层数据
+    function enableEdit(el, idx, field) { 
+        el.contentEditable = true; el.focus(); el.classList.add('editing'); 
+        el.onblur = () => { 
+            el.contentEditable = false; el.classList.remove('editing'); 
+            appData[currentUnitIdx].words[idx][field] = el.innerText; 
+            
+            if (appData[currentUnitIdx].name === "📕 错题本") {
+                if (notebook[idx]) notebook[idx][field] = el.innerText;
+                localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+            }
+            saveData(); 
+        }; 
+    }
+    
     function importWords() {
         let name = document.getElementById('unitNameInput').value.trim(); const text = document.getElementById('importText').value.trim(); const after = parseInt(document.getElementById('insertAfterSelect').value);
         if(!text) return; let targetUnitIndex = -1; if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
@@ -389,8 +398,31 @@
     }
     
     function removeDuplicates() { if(!confirm('确定清理重复？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
-    function delWord(i) { if(confirm('删除？')) { appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
-    function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); togglePanel('syncPanel');}}
+    
+    // 核心修复2: 删除单词时同步删除错题本底层数据
+    function delWord(i) { 
+        if(confirm('删除？')) { 
+            if (appData[currentUnitIdx].name === "📕 错题本") {
+                notebook.splice(i, 1);
+                localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+            }
+            appData[currentUnitIdx].words.splice(i,1); 
+            saveData(); render(); 
+        }
+    }
+    
+    // 核心修复3: 删除单元时同步清空错题本底层数据
+    function deleteCurrentUnit() { 
+        if(confirm('⚠️ 删单元？')) { 
+            if (appData[currentUnitIdx].name === "📕 错题本") {
+                notebook = [];
+                localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+            }
+            appData.splice(currentUnitIdx,1); currentUnitIdx=0; 
+            saveData(); render(); 
+        }
+    }
+    
     function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
     function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); alert('已复制'); }
     function downloadAll() { const b=new Blob([JSON.stringify(appData,null,2)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`cro_backup.json`; a.click(); }
@@ -422,7 +454,6 @@
             main.innerHTML = `<div class="match-grid"></div>`; const grid = main.querySelector('.match-grid'); let first = null; let matchedCount = 0;
             items.forEach(item => { const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t; div.onclick = () => { if(div.classList.contains('match-correct')) return; if(item.type === 'hr') speakSingle(item.t, 'hr'); div.classList.add('selected'); if(!first) { first = {div, item}; } else { if(first.div === div) return; if(first.item.id === item.id) { first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; if(matchedCount === num) { setTimeout(() => { challengeList.splice(0, num); showQuestion(); }, 400); } } else { div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id)); setTimeout(() => { div.className = 'match-item'; first.div.className = 'match-item'; }, 500); } first = null; } }; grid.appendChild(div); });
         } else if (displayMode === 'spell') {
-            // V41/V47 拼写界面完美还原
             main.innerHTML = `
                 <div class="spelling-container">
                     <div style="font-size:24px; color:#333; margin-bottom:10px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div>
@@ -439,18 +470,15 @@
             `;
             const input = document.getElementById('spellInp');
             input.focus();
-            // 支持回车键提交
             input.onkeydown = (e) => { if(e.key === 'Enter') checkSpell(); };
         }
     }
 
-    // 拼写验证逻辑 (V41 内联反馈还原)
     window.checkSpell = () => { 
         const input = document.getElementById('spellInp');
         const feedback = document.getElementById('spellFeedback');
         const current = challengeList[0]; 
         
-        // 鲁棒性字符清理比较
         const clean = (str) => str.normalize('NFC').toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, " ").replace(/\s+/g, " ").trim();
         const userVal = clean(input.value); 
         const targetVal = clean(current.hr);
@@ -466,7 +494,6 @@
             feedback.style.color = 'var(--danger)'; 
             feedback.innerText = `错误! 答案: ${current.hr}`; 
             addToNotebook(current); 
-            // 答错后不清空，让用户看到错在哪，等待其重新输入
             setTimeout(() => { input.classList.remove('error'); }, 2000); 
         } 
     };
