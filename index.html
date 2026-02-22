@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V54.5 (稳定修复版)</title>
+    <title>克语助手 V54.5 </title>
     <style>
         :root {
             --primary: #0056b3;
@@ -46,7 +46,6 @@
 
         .container { max-width: 800px; margin: 0 auto; padding: 0 15px 120px 15px; }
 
-        /* V54原有样式保留 */
         .challenge-box { background: white; padding: 20px; border-radius: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; }
         .mode-selector { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 5px; }
         .mode-btn { padding: 10px 4px; border-radius: 10px; border: 1px solid #eee; font-size: 13px; cursor: pointer; background: #f9f9f9; font-weight: 600; color: #666; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
@@ -82,14 +81,17 @@
         .match-item { padding: 22px 10px; border: 2px solid #f0f0f0; border-radius: 15px; text-align: center; background: #fff; font-size: 15px; transition: all 0.2s; cursor: pointer; font-weight: 500; display: flex; align-items: center; justify-content: center; word-break: break-word; }
         .match-item.selected { border-color: #6366f1; background: #f5f3ff; }
         .match-item.match-correct { background: var(--success) !important; color: white !important; border-color: var(--success) !important; transform: scale(0.95); opacity: 0.5; }
-        .spelling-container { width: 100%; max-width: 400px; text-align: center; }
-        .spelling-input { width: 100%; padding: 15px; font-size: 20px; text-align: center; border: 2px solid #6366f1; border-radius: 12px; margin-bottom: 15px; box-sizing: border-box; outline: none; }
+        
+        /* 完美还原拼写反馈样式 */
+        .spelling-container { width: 100%; max-width: 400px; text-align: center; margin: 0 auto;}
+        .spelling-input { width: 100%; padding: 15px; font-size: 20px; text-align: center; border: 2px solid #6366f1; border-radius: 12px; margin-bottom: 15px; box-sizing: border-box; outline: none; transition: all 0.3s;}
         .spelling-input.error { border-color: var(--danger); background: #fff5f5; }
         .spelling-input.success { border-color: var(--success); background: #f0fff4; }
+        .spelling-feedback { min-height: 24px; margin-bottom: 15px; font-weight: bold; font-size: 16px; transition: color 0.3s;}
         .special-chars { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
         .char-btn { background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 18px; user-select: none; }
 
-        /* V54.5 升级版沉浸模式控制层 */
+        /* 沉浸模式控制层 */
         #immersiveOverlay {
             display: none; position: fixed; inset: 0; background: #000; z-index: 3000;
             color: #fff; flex-direction: column; align-items: center; justify-content: center;
@@ -98,7 +100,6 @@
         .immersive-word { font-size: 32px; font-weight: bold; margin-bottom: 20px; color: #fff; }
         .immersive-cn { font-size: 20px; color: #888; margin-bottom: 60px; }
         
-        /* 新的控制按钮布局 */
         .controls-container { display: flex; gap: 30px; align-items: center; margin-bottom: 40px; }
         .immersive-ctrl { 
             width: 70px; height: 70px; border-radius: 50%; background: #222; color: white;
@@ -117,7 +118,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V54.5 (修复版)</h1>
+        <h1>🇭🇷 克语助手 V54.5 (UI还原版)</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -188,7 +189,6 @@
     </div>
     
     <div class="immersive-ctrl immersive-exit" style="border-color:#ff4d4f; color:#ff4d4f" onclick="stopImmersiveMode()">✕</div>
-
     <div class="immersive-tip">🎧 支持锁屏/后台播放<br>如遇停止请点击暂停/播放重试</div>
 </div>
 
@@ -197,13 +197,13 @@
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
-    // 数据加载 (兼容旧版数据)
+    // 数据加载
     let appData = JSON.parse(localStorage.getItem('cro_v54_5')) || JSON.parse(localStorage.getItem('cro_v54')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let savedUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx'));
     let currentUnitIdx = (!isNaN(savedUnitIdx) && savedUnitIdx >= 0 && savedUnitIdx < appData.length) ? savedUnitIdx : (appData.length > 0 ? 0 : -1);
 
-    // --- V54.5 新增：发音引擎管理 ---
+    // --- 发音引擎管理 ---
     let availableVoices = [];
     let selectedVoiceURI = localStorage.getItem('cro_selected_voice') || '';
 
@@ -227,13 +227,12 @@
         localStorage.setItem('cro_selected_voice', selectedVoiceURI);
     }
 
-    // --- V54.5 核心修复：防GC发音 + 后台保活 ---
-    window.currentUtterance = null; // 全局变量防GC
-    const bgMusic = document.getElementById('bgMusic'); // 保活轨道
+    // --- 播放核心 ---
+    window.currentUtterance = null;
+    const bgMusic = document.getElementById('bgMusic');
 
     function speakLocal(text, lang, onEndCallback) {
         window.speechSynthesis.cancel();
-        
         window.currentUtterance = new SpeechSynthesisUtterance(text);
         if (lang === 'hr' && selectedVoiceURI) {
             const v = availableVoices.find(i => i.voiceURI === selectedVoiceURI);
@@ -242,115 +241,84 @@
         window.currentUtterance.lang = lang === 'hr' ? 'hr-HR' : 'zh-CN';
         window.currentUtterance.rate = 1.0;
 
-        // 超时保护
         const safeTimer = setTimeout(() => { if(onEndCallback) onEndCallback(); }, (text.length * 200) + 3000);
-
         window.currentUtterance.onend = () => { clearTimeout(safeTimer); if(onEndCallback) onEndCallback(); };
         window.currentUtterance.onerror = () => { clearTimeout(safeTimer); if(onEndCallback) onEndCallback(); };
         
         window.speechSynthesis.speak(window.currentUtterance);
     }
 
-    // --- 沉浸模式逻辑 (暂停/锁屏修复) ---
-    let isImmersive = false;
-    let isPaused = false; // 新增暂停状态
-    let playQueue = [];
-    let playQueueIndex = 0;
-    let wakeLock = null;
+    function speakSingle(text, lang) {
+        speakLocal(text, lang);
+    }
 
+    // --- 沉浸模式逻辑 ---
+    let isImmersive = false; let isPaused = false; let playQueue = []; let playQueueIndex = 0; let wakeLock = null;
     async function requestWakeLock() { try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (err) {} }
 
     function startImmersiveMode() {
         const unit = appData[currentUnitIdx];
         if (!unit || unit.words.length === 0) return alert('当前单元没有单词');
         
-        isImmersive = true;
-        isPaused = false;
+        isImmersive = true; isPaused = false;
         document.getElementById('immersiveOverlay').style.display = 'flex';
         document.getElementById('playPauseBtn').innerText = '⏸';
         document.getElementById('playPauseBtn').classList.add('active');
         requestWakeLock();
+        bgMusic.play().catch(()=>{}); // 启动后台静音轨道
 
-        // 关键：启动后台静音轨道，骗过 iOS 锁屏限制
-        bgMusic.play().catch(()=>{});
-
-        // 构建队列
         playQueue = [];
         unit.words.forEach((w, idx) => {
             const hrText = w.hr.normalize('NFC').replace(/[\r\n]+/g, " ");
             const cnText = w.cn ? w.cn.normalize('NFC').replace(/[\r\n]+/g, " ") : "";
             playQueue.push({ type: 'speak', text: hrText, lang: 'hr', uiHr: hrText, uiCn: cnText, rowIndex: idx });
-            if (cnText) {
-                playQueue.push({ type: 'speak', text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
-            }
+            if (cnText) playQueue.push({ type: 'speak', text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
             playQueue.push({ type: 'delay' });
         });
 
-        playQueueIndex = 0;
-        processQueue();
+        playQueueIndex = 0; processQueue();
     }
 
     function togglePause() {
-        isPaused = !isPaused;
-        const btn = document.getElementById('playPauseBtn');
-        if (isPaused) {
-            window.speechSynthesis.cancel(); // 停止当前发音
-            btn.innerText = '▶️';
-            btn.classList.remove('active');
-        } else {
-            btn.innerText = '⏸';
-            btn.classList.add('active');
-            processQueue(); // 继续播放
-        }
+        isPaused = !isPaused; const btn = document.getElementById('playPauseBtn');
+        if (isPaused) { window.speechSynthesis.cancel(); btn.innerText = '▶️'; btn.classList.remove('active'); } 
+        else { btn.innerText = '⏸'; btn.classList.add('active'); processQueue(); }
     }
 
     function nextWord() {
         window.speechSynthesis.cancel();
-        // 跳到下一个单词开始处
-        let next = playQueueIndex + 1;
-        while(next < playQueue.length && playQueue[next].lang !== 'hr') next++;
+        let next = playQueueIndex + 1; while(next < playQueue.length && playQueue[next].lang !== 'hr') next++;
         playQueueIndex = next >= playQueue.length ? 0 : next;
         if(isPaused) togglePause(); else processQueue();
     }
 
     function prevWord() {
         window.speechSynthesis.cancel();
-        let prev = playQueueIndex - 1;
-        while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--;
+        let prev = playQueueIndex - 1; while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--;
         playQueueIndex = prev < 0 ? 0 : prev;
         if(isPaused) togglePause(); else processQueue();
     }
 
     function stopImmersiveMode() {
-        isImmersive = false;
-        isPaused = false;
+        isImmersive = false; isPaused = false;
         document.getElementById('immersiveOverlay').style.display = 'none';
-        window.speechSynthesis.cancel();
-        bgMusic.pause(); // 停止后台轨道
+        window.speechSynthesis.cancel(); bgMusic.pause();
         if (wakeLock) { wakeLock.release(); wakeLock = null; }
         document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
     }
 
     function processQueue() {
         if (!isImmersive || isPaused) return;
-        if (playQueueIndex >= playQueue.length) playQueueIndex = 0; // 循环
+        if (playQueueIndex >= playQueue.length) playQueueIndex = 0;
 
         const item = playQueue[playQueueIndex];
-
-        // UI 更新
         if (item.uiHr) {
-            document.getElementById('immHr').innerText = item.uiHr;
-            document.getElementById('immCn').innerText = item.uiCn;
-            
-            // 锁屏控制中心显示
+            document.getElementById('immHr').innerText = item.uiHr; document.getElementById('immCn').innerText = item.uiCn;
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.metadata = new MediaMetadata({ title: item.uiHr, artist: item.uiCn });
-                navigator.mediaSession.setActionHandler('play', togglePause);
-                navigator.mediaSession.setActionHandler('pause', togglePause);
-                navigator.mediaSession.setActionHandler('nexttrack', nextWord);
-                navigator.mediaSession.setActionHandler('previoustrack', prevWord);
+                navigator.mediaSession.setActionHandler('play', togglePause); navigator.mediaSession.setActionHandler('pause', togglePause);
+                navigator.mediaSession.setActionHandler('nexttrack', nextWord); navigator.mediaSession.setActionHandler('previoustrack', prevWord);
             }
-
             if(item.rowIndex !== undefined) {
                 document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
                 const row = document.getElementById(`word-row-${item.rowIndex}`);
@@ -358,23 +326,14 @@
             }
         }
 
-        if (item.type === 'delay') {
-            setTimeout(() => {
-                if(!isPaused) { playQueueIndex++; processQueue(); }
-            }, 1200);
-        } else if (item.type === 'speak') {
-            speakLocal(item.text, item.lang, () => {
-                if(!isPaused) { playQueueIndex++; processQueue(); }
-            });
-        }
+        if (item.type === 'delay') { setTimeout(() => { if(!isPaused) { playQueueIndex++; processQueue(); } }, 1200); } 
+        else if (item.type === 'speak') { speakLocal(item.text, item.lang, () => { if(!isPaused) { playQueueIndex++; processQueue(); } }); }
     }
 
-    // --- V54 原始功能保留 (导入/导出/挑战) ---
+    // --- 界面渲染与数据 ---
     function render() {
-        const list = document.getElementById('wordListContainer');
-        const select = document.getElementById('unitSelect');
-        const insertSelect = document.getElementById('insertAfterSelect');
-        const nameInput = document.getElementById('unitNameInput');
+        const list = document.getElementById('wordListContainer'); const select = document.getElementById('unitSelect');
+        const insertSelect = document.getElementById('insertAfterSelect'); const nameInput = document.getElementById('unitNameInput');
         list.innerHTML = ''; select.innerHTML = ''; insertSelect.innerHTML = '<option value="-1">置顶添加</option>';
         if (appData.length === 0) { nameInput.placeholder = "单元名称"; list.innerHTML = '<div style="text-align:center;color:#999;padding:40px">暂无单词</div>'; return; }
         appData.forEach((u, i) => {
@@ -389,28 +348,21 @@
             const row = document.createElement('div');
             row.className = 'word-row'; row.id = `word-row-${i}`;
             row.innerHTML = `
-                <div class="left-part" onclick="speakLocal('${w.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">
-                    ${audioIconSvg} <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
+                <div class="left-part">
+                    <span onclick="speakSingle('${w.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">${audioIconSvg}</span>
+                    <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
                 </div>
                 <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${w.cn}</div>
                 <div class="action-area"><div class="del-word-btn" onclick="delWord(${i})">✕</div><div class="drag-handle">≡</div></div>
             `;
             list.appendChild(row);
         });
-        // 绑定拖拽 (保留V54逻辑)
         setupDrag();
     }
 
-    // 拖拽逻辑
-    function setupDrag() {
-        document.querySelectorAll('.drag-handle').forEach(h => {
-            h.addEventListener('touchstart', handleTouchStart, {passive: false});
-            h.addEventListener('touchmove', handleTouchMove, {passive: false});
-            h.addEventListener('touchend', handleTouchEnd);
-            h.addEventListener('mousedown', handleMouseDown);
-        });
-    }
-    let startY = 0; let pressTimer = null; let isDragActive = false;
+    // 拖拽
+    function setupDrag() { document.querySelectorAll('.drag-handle').forEach(h => { h.addEventListener('touchstart', handleTouchStart, {passive: false}); h.addEventListener('touchmove', handleTouchMove, {passive: false}); h.addEventListener('touchend', handleTouchEnd); h.addEventListener('mousedown', handleMouseDown); }); }
+    let startY = 0; let pressTimer = null; let isDragActive = false; let dragEl = null;
     function handleTouchStart(e) { startY = e.touches[0].clientY; const row = this.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); if(navigator.vibrate) navigator.vibrate(50); }, 800); }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
     function handleTouchEnd(e) { clearTimeout(pressTimer); if (isDragActive) stopDragging(); isDragActive = false; }
@@ -423,13 +375,7 @@
 
     function jumpToUnit() { currentUnitIdx = parseInt(document.getElementById('unitSelect').value); exitNotebookMode(); saveData(); render(); }
     function changeUnit(dir) { let n = currentUnitIdx + dir; if(n >= 0 && n < appData.length) { currentUnitIdx = n; exitNotebookMode(); saveData(); render(); } }
-    function goToNotebook() { 
-        if(notebook.length===0) return alert('空'); 
-        localStorage.setItem('cro_viewing_notebook', 'true');
-        const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); 
-        if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); 
-        currentUnitIdx = (idx > -1) ? idx : 0; saveData(); render(); 
-    }
+    function goToNotebook() { if(notebook.length===0) return alert('空'); localStorage.setItem('cro_viewing_notebook', 'true'); const name="📕 错题本"; const idx=appData.findIndex(u=>u.name===name); if(idx>-1) appData[idx].words=notebook; else appData.unshift({name, words:notebook}); currentUnitIdx = (idx > -1) ? idx : 0; saveData(); render(); }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     function saveData() { localStorage.setItem('cro_v54_5', JSON.stringify(appData)); localStorage.setItem('cro_last_unit_idx', currentUnitIdx); }
 
@@ -442,16 +388,29 @@
         saveData(); render(); togglePanel('importPanel'); document.getElementById('importText').value = ''; 
     }
     
+    function removeDuplicates() { if(!confirm('确定清理重复？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个重复`); }
+    function delWord(i) { if(confirm('删除？')) { appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
+    function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); togglePanel('syncPanel');}}
+    function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
+    function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); alert('已复制'); }
+    function downloadAll() { const b=new Blob([JSON.stringify(appData,null,2)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`cro_backup.json`; a.click(); }
+    function handleFileImport(i) { const r=new FileReader(); r.onload=(e)=>{ appData=[...JSON.parse(e.target.result),...appData]; saveData(); render(); alert('导入成功'); }; r.readAsText(i.files[0]); }
+    function importFromCode() { try { appData=[...JSON.parse(document.getElementById('codeText').value),...appData]; saveData(); render(); alert('成功'); } catch(e){alert('错误');} }
+
+    // --- 完美还原 V41/V47 拼写挑战模式 ---
     let currentMode = 'quiz'; let challengeList = [];
     function setMode(mode) { currentMode = mode; document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active')); document.getElementById('mode-' + mode).classList.add('active'); }
-    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return; speakLocal(' ', 'hr'); challengeList = [...unit.words].sort(() => Math.random() - 0.5); document.getElementById('challengeOverlay').style.display = 'flex'; showQuestion(); }
+    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit || unit.words.length === 0) return; speakSingle(' ', 'hr'); challengeList = [...unit.words].sort(() => Math.random() - 0.5); document.getElementById('challengeOverlay').style.display = 'flex'; showQuestion(); }
+    
     function showQuestion() {
         if(challengeList.length === 0) { alert("恭喜！复习完成"); return exitChallenge(); }
         const main = document.getElementById('challengeMain'); main.innerHTML = ''; document.getElementById('challengeProgress').innerText = `剩余: ${challengeList.length}`;
         const current = challengeList[0];
-        if(document.getElementById('autoVoice').checked) speakLocal(current.hr, 'hr');
+        if(document.getElementById('autoVoice').checked) speakSingle(current.hr, 'hr');
+        
         let displayMode = currentMode;
         if (currentMode === 'mixed') { const r = Math.random(); if (challengeList.length >= 4 && r < 0.3) displayMode = 'match'; else if (r < 0.65) displayMode = 'quiz'; else displayMode = 'spell'; }
+        
         if(displayMode === 'quiz') {
             main.innerHTML = `<div style="font-size:28px; margin-bottom:30px; font-weight:bold; color:#6366f1; text-align:center; white-space: pre-wrap">${current.hr}</div>`;
             const options = [current]; const all = appData[currentUnitIdx].words;
@@ -461,22 +420,58 @@
             const num = Math.min(challengeList.length, 4); const currentBatch = challengeList.slice(0, num);
             const items = [...currentBatch.map(s => ({t: s.hr, id: s.hr, type:'hr'})), ...currentBatch.map(s => ({t: s.cn, id: s.hr, type:'cn'}))].sort(() => Math.random() - 0.5);
             main.innerHTML = `<div class="match-grid"></div>`; const grid = main.querySelector('.match-grid'); let first = null; let matchedCount = 0;
-            items.forEach(item => { const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t; div.onclick = () => { if(div.classList.contains('match-correct')) return; if(item.type === 'hr') speakLocal(item.t, 'hr'); div.classList.add('selected'); if(!first) { first = {div, item}; } else { if(first.div === div) return; if(first.item.id === item.id) { first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; if(matchedCount === num) { setTimeout(() => { challengeList.splice(0, num); showQuestion(); }, 400); } } else { div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id)); setTimeout(() => { div.className = 'match-item'; first.div.className = 'match-item'; }, 500); } first = null; } }; grid.appendChild(div); });
+            items.forEach(item => { const div = document.createElement('div'); div.className = 'match-item'; div.innerText = item.t; div.onclick = () => { if(div.classList.contains('match-correct')) return; if(item.type === 'hr') speakSingle(item.t, 'hr'); div.classList.add('selected'); if(!first) { first = {div, item}; } else { if(first.div === div) return; if(first.item.id === item.id) { first.div.className = 'match-item match-correct'; div.className = 'match-item match-correct'; matchedCount++; if(matchedCount === num) { setTimeout(() => { challengeList.splice(0, num); showQuestion(); }, 400); } } else { div.className = 'match-item match-wrong'; first.div.className = 'match-item match-wrong'; addToNotebook(challengeList.find(c => c.hr === item.id)); setTimeout(() => { div.className = 'match-item'; first.div.className = 'match-item'; }, 500); } first = null; } }; grid.appendChild(div); });
         } else if (displayMode === 'spell') {
-            main.innerHTML = `<div class="spelling-container"><div style="font-size:24px; color:#333; margin-bottom:20px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div><input type="text" id="spellInput" class="spelling-input" placeholder="输入克语" autocomplete="off"><div class="special-chars">${['č','ć','đ','š','ž'].map(c => `<div class="char-btn" onclick="document.getElementById('spellInput').value+='${c}'">${c}</div>`).join('')}</div><button class="start-btn" onclick="checkSpelling()">提交验证</button></div>`;
-            document.getElementById('spellInput').focus();
+            // V41/V47 拼写界面完美还原
+            main.innerHTML = `
+                <div class="spelling-container">
+                    <div style="font-size:24px; color:#333; margin-bottom:10px; font-weight:bold; white-space:pre-wrap;">${current.cn}</div>
+                    <div id="spellFeedback" class="spelling-feedback"></div>
+                    <input type="text" id="spellInp" class="spelling-input" placeholder="输入克语..." autocomplete="off">
+                    <div class="special-chars">
+                        ${['č','ć','đ','š','ž'].map(c => `<div class="char-btn" onclick="document.getElementById('spellInp').value+='${c}'; document.getElementById('spellInp').focus();">${c}</div>`).join('')}
+                    </div>
+                    <button class="start-btn" onclick="checkSpell()">提交验证</button>
+                    <div style="margin-top:20px; cursor:pointer; color:#666; font-size:15px; display:inline-flex; align-items:center; justify-content:center; gap:5px;" onclick="speakSingle('${current.hr.replace(/'/g, "\\'").replace(/[\r\n]+/g, " ")}', 'hr')">
+                        🔊 重听
+                    </div>
+                </div>
+            `;
+            const input = document.getElementById('spellInp');
+            input.focus();
+            // 支持回车键提交
+            input.onkeydown = (e) => { if(e.key === 'Enter') checkSpell(); };
         }
     }
-    function checkSpelling() { const input = document.getElementById('spellInput'); const current = challengeList[0]; if (input.value.trim().toLowerCase() === current.hr.toLowerCase()) { input.classList.add('success'); setTimeout(() => { challengeList.shift(); showQuestion(); }, 1000); } else { input.classList.add('error'); addToNotebook(current); alert(`正确答案: ${current.hr}`); } }
+
+    // 拼写验证逻辑 (V41 内联反馈还原)
+    window.checkSpell = () => { 
+        const input = document.getElementById('spellInp');
+        const feedback = document.getElementById('spellFeedback');
+        const current = challengeList[0]; 
+        
+        // 鲁棒性字符清理比较
+        const clean = (str) => str.normalize('NFC').toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, " ").replace(/\s+/g, " ").trim();
+        const userVal = clean(input.value); 
+        const targetVal = clean(current.hr);
+
+        if (userVal === targetVal) { 
+            input.classList.remove('error');
+            input.classList.add('success'); 
+            feedback.style.color = 'var(--success)'; 
+            feedback.innerText = "正确! ✅"; 
+            setTimeout(() => { challengeList.shift(); showQuestion(); }, 800); 
+        } else { 
+            input.classList.add('error'); 
+            feedback.style.color = 'var(--danger)'; 
+            feedback.innerText = `错误! 答案: ${current.hr}`; 
+            addToNotebook(current); 
+            // 答错后不清空，让用户看到错在哪，等待其重新输入
+            setTimeout(() => { input.classList.remove('error'); }, 2000); 
+        } 
+    };
+
     function addToNotebook(word) { if(!notebook.some(w => w.hr === word.hr)) { notebook.push(word); localStorage.setItem('cro_notebook', JSON.stringify(notebook)); } }
-    function removeDuplicates() { if(!confirm('确定清理？')) return; let c = 0; appData.forEach(u => { const m = new Map(), cl = []; u.words.forEach(w => { const k=w.hr.toLowerCase().trim(); if(!m.has(k)){m.set(k,1);cl.push(w)}else c++ }); u.words=cl; }); saveData(); render(); alert(`清理了 ${c} 个`); }
-    function delWord(i) { if(confirm('删除？')) { appData[currentUnitIdx].words.splice(i,1); saveData(); render(); }}
-    function deleteCurrentUnit() { if(confirm('⚠️ 删单元？')) { appData.splice(currentUnitIdx,1); currentUnitIdx=0; saveData(); render(); }}
-    function togglePanel(id) { const p=document.getElementById(id); p.style.display=(p.style.display==='block'?'none':'block'); }
-    function copyFullCode() { const a=document.getElementById('codeText'); a.value=JSON.stringify(appData); a.select(); document.execCommand('copy'); alert('已复制'); }
-    function downloadAll() { const b=new Blob([JSON.stringify(appData,null,2)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`cro_backup.json`; a.click(); }
-    function handleFileImport(i) { const r=new FileReader(); r.onload=(e)=>{ appData=[...JSON.parse(e.target.result),...appData]; saveData(); render(); alert('导入成功'); }; r.readAsText(i.files[0]); }
-    function importFromCode() { try { appData=[...JSON.parse(document.getElementById('codeText').value),...appData]; saveData(); render(); alert('成功'); } catch(e){alert('错误');} }
     function exitChallenge() { document.getElementById('challengeOverlay').style.display='none'; }
     if (localStorage.getItem('cro_viewing_notebook') === 'true') { goToNotebook(); } else { render(); }
 </script>
