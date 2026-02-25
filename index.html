@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V60 (完美收官版)</title>
+    <title>克语助手 V60(完美收官)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -375,7 +375,6 @@
         window.speechSynthesis.cancel(); gapAudio.pause(); 
         let prev = playQueueIndex - 1; 
         while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--; 
-        // 修复 3: 无缝循环跳回最后一个单词
         if (prev < 0) {
             prev = playQueue.length - 1;
             while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--;
@@ -411,8 +410,9 @@
         unit.words.forEach((w, i) => {
             const row = document.createElement('div');
             row.className = 'word-row'; row.id = `word-row-${i}`;
+            // 核心修复：使用 .replace(/[\r\n]+/g, " ") 防止多行文本截断 onclick 字符串
             row.innerHTML = `
-                <div class="left-part" onclick="speakSingle('${w.hr.replace(/'/g,"\\'")}', 'hr')">
+                <div class="left-part" onclick="speakSingle('${w.hr.replace(/'/g,"\\'").replace(/[\r\n]+/g, " ")}', 'hr')">
                     ${audioIconSvg} <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
                 </div>
                 <div class="col-cn" ondblclick="enableEdit(this, ${i}, 'cn')">${w.cn}</div>
@@ -428,14 +428,14 @@
     let startY = 0; let pressTimer = null; let isDragActive = false; let dragEl = null;
     
     function handleTouchStart(e) { 
-        if(isImmersive) return; // 修复 2: 沉浸模式下禁用拖拽
+        if(isImmersive) return; 
         startY = e.touches[0].clientY; const row = this.closest('.word-row'); pressTimer = setTimeout(() => { isDragActive = true; dragEl = row; dragEl.classList.add('dragging'); if(navigator.vibrate) navigator.vibrate(50); }, 800); 
     }
     function handleTouchMove(e) { if (!isDragActive) { if (Math.abs(e.touches[0].clientY - startY) > 10) clearTimeout(pressTimer); return; } if (e.cancelable) e.preventDefault(); performDrag(e.touches[0].clientX, e.touches[0].clientY); }
     function handleTouchEnd(e) { clearTimeout(pressTimer); if (isDragActive) stopDragging(); isDragActive = false; }
     
     function handleMouseDown(e) { 
-        if(isImmersive) return; // 修复 2: 沉浸模式下禁用拖拽
+        if(isImmersive) return; 
         dragEl = this.closest('.word-row'); isDragActive = true; dragEl.classList.add('dragging'); document.addEventListener('mousemove', handleMouseMoveGlobal); document.addEventListener('mouseup', handleMouseUpGlobal); e.preventDefault(); 
     }
     function handleMouseMoveGlobal(e) { if (!isDragActive) return; e.preventDefault(); performDrag(e.clientX, e.clientY); }
@@ -502,7 +502,6 @@
         if(notebook.length===0) return alert('空'); 
         localStorage.setItem('cro_viewing_notebook', 'true');
         const idx = appData.findIndex(u=>u.name==="📕 错题本"); 
-        // 修复 1: 确保错题本数据载入时是深拷贝
         if(idx===-1) { 
             appData.unshift({name:"📕 错题本", words: JSON.parse(JSON.stringify(notebook)) }); 
             currentUnitIdx=0; 
@@ -517,7 +516,7 @@
     // --- 完美还原挑战模式 ---
     let currentMode = 'quiz'; let challengeList = [];
     function setMode(m) { currentMode = m; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.id==='mode-'+m)); }
-    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; speakSingle(' ', 'hr'); challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
+    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
     
     function showQuestion() {
         if(!challengeList.length) { alert("完成！"); return exitChallenge(); }
@@ -528,7 +527,6 @@
         let displayMode = currentMode;
         if (currentMode === 'mixed') { const r = Math.random(); if (challengeList.length >= 4 && r < 0.3) displayMode = 'match'; else if (r < 0.65) displayMode = 'quiz'; else displayMode = 'spell'; }
         
-        // 修复 4: 只有非连连看模式，且勾选了自动发音，才发音（防提前泄题）
         if (displayMode !== 'match' && document.getElementById('autoVoice').checked) {
             speakSingle(current.hr, 'hr');
         }
@@ -611,7 +609,6 @@
         } 
     };
 
-    // 修复 1: 错题本添加时使用深拷贝
     function addToNotebook(w) { 
         if(!notebook.some(n=>n.hr===w.hr)) { 
             notebook.push(JSON.parse(JSON.stringify(w))); 
