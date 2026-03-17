@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V60.4 (iOS连播修复版)</title>
+    <title>克语助手 V60.5 (iOS完美播放版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -142,7 +142,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V60.4</h1>
+        <h1>🇭🇷 克语助手 V60.5</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -206,7 +206,7 @@
         <div class="imm-btn" onclick="nextWord()">⏭</div>
         <div class="imm-btn" style="color:var(--danger)" onclick="closeImmersive()">✕</div>
     </div>
-    <div class="immersive-tip">🎧 锁屏后台保活版<br>支持锁屏控制进度</div>
+    <div class="immersive-tip">🎧 iOS/锁屏 后台保活终极版<br>支持息屏无缝连播与切歌</div>
 </div>
 
 <div id="challengeOverlay">
@@ -218,13 +218,13 @@
     <div id="challengeMain" class="challenge-body"></div>
 </div>
 
-<audio id="gapAudio" playsinline src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASAAAAAAAASAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA"></audio>
+<audio id="bgEngine" loop playsinline src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASAAAAAAAASAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAA"></audio>
 
 <script>
     const audioIconSvg = `<svg class="icon-audio" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
 
     // 数据加载
-    let appData = JSON.parse(localStorage.getItem('cro_v60')) || JSON.parse(localStorage.getItem('cro_v59')) || JSON.parse(localStorage.getItem('cro_v58')) || [];
+    let appData = JSON.parse(localStorage.getItem('cro_v60')) || JSON.parse(localStorage.getItem('cro_v59')) || [];
     let notebook = JSON.parse(localStorage.getItem('cro_notebook')) || [];
     let currentUnitIdx = parseInt(localStorage.getItem('cro_last_unit_idx')) || 0;
     let selectedVoiceURI = localStorage.getItem('cro_selected_voice') || '';
@@ -256,90 +256,86 @@
     function speakSingle(text, lang) {
         window.speechSynthesis.cancel();
         window.singleUtter = new SpeechSynthesisUtterance(text);
-        const v = voices.find(i => i.voiceURI === selectedVoiceURI);
-        if(v) window.singleUtter.voice = v;
+        
+        // 核心修复 1：只给克罗地亚语强行绑定 Lana。遇到中文，让系统自动用默认的中文发音！
+        if (lang === 'hr') {
+            const v = voices.find(i => i.voiceURI === selectedVoiceURI);
+            if(v) window.singleUtter.voice = v;
+        }
+        
         window.singleUtter.lang = lang === 'hr' ? 'hr-HR' : 'zh-CN';
         window.speechSynthesis.speak(window.singleUtter);
     }
 
-    // ==========================================
-    // --- 核心播放逻辑：音频链条 (Audio Chain) ---
-    // ==========================================
+    // =========================================================
+    // --- 终极 iOS 链条播放系统 (纯 Speech API，弃用 audio) ---
+    // =========================================================
     window.utterInstance = null;
-    const gapAudio = document.getElementById('gapAudio');
     let isImmersive = false;
     let isPaused = false;
     let playQueue = [];
     let playQueueIndex = 0;
     let wakeLock = null;
+    const bgEngine = document.getElementById('bgEngine');
 
     function speakStep(item) {
         if (!isImmersive || isPaused) return;
 
         window.utterInstance = new SpeechSynthesisUtterance(item.text);
         
-        const v = voices.find(i => i.voiceURI === selectedVoiceURI);
-        if(v) window.utterInstance.voice = v;
-        window.utterInstance.lang = item.lang === 'hr' ? 'hr-HR' : 'zh-CN';
-        window.utterInstance.rate = 1.0;
+        // 核心修复 2：中文坚决不套用克罗地亚的 voice，防止被 iOS 强行静音吞没
+        if (item.lang === 'hr') {
+            const v = voices.find(i => i.voiceURI === selectedVoiceURI);
+            if(v) window.utterInstance.voice = v;
+        } else if (item.lang === 'delay') {
+            // 核心修复 3：这就是那个隐形的“延迟单词”，用来替代以前会断链的 setTimeout
+            window.utterInstance.volume = 0.01; // 极低音量
+            window.utterInstance.rate = 0.3;    // 语速变慢，拖延时间（约1秒）
+        }
+        
+        if (item.lang !== 'delay') {
+            window.utterInstance.lang = item.lang === 'hr' ? 'hr-HR' : 'zh-CN';
+            window.utterInstance.rate = 1.0;
+        }
 
-        let resolved = false;
-        const finish = () => {
-            if(resolved) return;
-            resolved = true;
-            clearTimeout(safeTimer);
-            if (isImmersive && !isPaused) playGap();
+        // 首尾绝对相连，没有任何 setTimeout 断档
+        window.utterInstance.onend = () => {
+            if (isImmersive && !isPaused) {
+                playQueueIndex++;
+                nextStep();
+            }
         };
-
-        window.utterInstance.onend = finish;
-        window.utterInstance.onerror = finish;
-
-        // 依然保留看门狗定时器，防止彻底死锁
-        const safeTimer = setTimeout(finish, (item.text.length * 200) + 2500);
+        window.utterInstance.onerror = () => {
+            if (isImmersive && !isPaused) {
+                playQueueIndex++;
+                nextStep();
+            }
+        };
 
         window.speechSynthesis.speak(window.utterInstance);
     }
 
-    function playGap() {
-        if (!isImmersive || isPaused) return;
-        gapAudio.currentTime = 0;
-        // 修复：iOS下为了连贯，不要在这里设断点。放慢语速来产生物理延迟，保持同步执行。
-        gapAudio.playbackRate = 0.8; 
-        const playPromise = gapAudio.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(e => {
-                // 如果极其罕见地失败了，才使用强制跳过
-                playQueueIndex++;
-                nextStep(); 
-            });
-        }
-    }
-
-    // 核心修复：彻底去掉 setTimeout，保持苹果系统的连续媒体权限！
-    gapAudio.onended = function() {
-        if (!isImmersive || isPaused) return;
-        playQueueIndex++;
-        nextStep();
-    };
-
     function nextStep() {
         if (playQueueIndex >= playQueue.length) playQueueIndex = 0; 
         const item = playQueue[playQueueIndex];
-        updateUI(item);
-        if(item.type === 'delay') { playGap(); } else { speakStep(item); }
-    }
-
-    function updateUI(item) {
-        if (item.uiHr) {
+        
+        // 遇到真实的单词才更新屏幕显示
+        if (item.lang !== 'delay') {
             document.getElementById('immHr').innerText = item.uiHr;
             document.getElementById('immCn').innerText = item.uiCn;
-            if ('mediaSession' in navigator) { navigator.mediaSession.metadata = new MediaMetadata({ title: item.uiHr, artist: item.uiCn }); }
+            
+            if ('mediaSession' in navigator) { 
+                navigator.mediaSession.metadata = new MediaMetadata({ title: item.uiHr, artist: item.uiCn }); 
+            }
             if(item.rowIndex !== undefined) {
                 document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now'));
                 const row = document.getElementById(`word-row-${item.rowIndex}`);
                 if(row) { row.classList.add('playing-now'); row.scrollIntoView({behavior:'smooth', block:'center'}); }
             }
         }
+        
+        // 绝对相连
+        speakStep(item);
     }
 
     // --- 沉浸模式控制 ---
@@ -354,6 +350,8 @@
         document.getElementById('immPlayBtn').classList.add('active');
         
         requestWakeLock();
+        // 启动后台引擎，它只负责拉住系统的命脉，不参与发音控制
+        bgEngine.play().catch(()=>{});
 
         if ('mediaSession' in navigator) {
             navigator.mediaSession.setActionHandler('play', togglePause);
@@ -366,13 +364,20 @@
         unit.words.forEach((w, idx) => {
             const hrText = w.hr.normalize('NFC').replace(/[\r\n]+/g, " ");
             const cnText = w.cn ? w.cn.normalize('NFC').replace(/[\r\n]+/g, " ") : "";
-            playQueue.push({ type: 'speak', text: hrText, lang: 'hr', uiHr: hrText, uiCn: cnText, rowIndex: idx });
-            if (cnText) playQueue.push({ type: 'speak', text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
+            
+            // 加入克罗地亚语
+            playQueue.push({ text: hrText, lang: 'hr', uiHr: hrText, uiCn: cnText, rowIndex: idx });
+            
+            // 加入中文（如果有）
+            if (cnText) {
+                playQueue.push({ text: cnText, lang: 'zh-CN', uiHr: hrText, uiCn: cnText, rowIndex: idx });
+            }
+            
+            // 加入隐形的停顿词（完美衔接，iOS不杀后台）
+            playQueue.push({ text: ". . . . .", lang: 'delay' });
         });
 
         playQueueIndex = 0;
-        // 先激活静音，骗过iOS
-        gapAudio.play().catch(()=>{});
         nextStep(); 
     }
 
@@ -380,7 +385,7 @@
         isPaused = !isPaused;
         const btn = document.getElementById('immPlayBtn');
         if (isPaused) { 
-            window.speechSynthesis.cancel(); gapAudio.pause(); btn.innerText = '▶️'; btn.classList.remove('active'); 
+            window.speechSynthesis.cancel(); btn.innerText = '▶️'; btn.classList.remove('active'); 
         } else { 
             btn.innerText = '⏸'; btn.classList.add('active'); nextStep(); 
         }
@@ -388,18 +393,19 @@
 
     function nextWord() { 
         window.speechSynthesis.cancel(); 
-        gapAudio.currentTime = 0; gapAudio.play().catch(()=>{});
-
         let next = playQueueIndex + 1; 
         while(next < playQueue.length && playQueue[next].lang !== 'hr') next++; 
         playQueueIndex = next >= playQueue.length ? 0 : next; 
-        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 50); } 
+        if(isPaused) { 
+            document.getElementById('immHr').innerText = playQueue[playQueueIndex].uiHr;
+            document.getElementById('immCn').innerText = playQueue[playQueueIndex].uiCn;
+        } else { 
+            setTimeout(nextStep, 50); 
+        } 
     }
 
     function prevWord() { 
         window.speechSynthesis.cancel(); 
-        gapAudio.currentTime = 0; gapAudio.play().catch(()=>{});
-
         let prev = playQueueIndex - 1; 
         while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--; 
         if (prev < 0) {
@@ -407,10 +413,21 @@
             while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--;
         }
         playQueueIndex = prev < 0 ? 0 : prev; 
-        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 50); }
+        if(isPaused) { 
+            document.getElementById('immHr').innerText = playQueue[playQueueIndex].uiHr;
+            document.getElementById('immCn').innerText = playQueue[playQueueIndex].uiCn;
+        } else { 
+            setTimeout(nextStep, 50); 
+        }
     }
 
-    function closeImmersive() { isImmersive = false; isPaused = false; document.getElementById('immersiveOverlay').style.display = 'none'; window.speechSynthesis.cancel(); gapAudio.pause(); if (wakeLock) { wakeLock.release(); wakeLock = null; } document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now')); }
+    function closeImmersive() { 
+        isImmersive = false; isPaused = false; 
+        document.getElementById('immersiveOverlay').style.display = 'none'; 
+        window.speechSynthesis.cancel(); bgEngine.pause(); 
+        if (wakeLock) { wakeLock.release(); wakeLock = null; } 
+        document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now')); 
+    }
 
     // --- 数据管理与DOM ---
     function fixCroText(text) { return text ? text.normalize('NFC').replace(/c\s*ˇ/g, "č").replace(/C\s*ˇ/g, "Č").replace(/s\s*ˇ/g, "š").replace(/S\s*ˇ/g, "Š").replace(/z\s*ˇ/g, "ž").replace(/Z\s*ˇ/g, "Ž") : ""; }
