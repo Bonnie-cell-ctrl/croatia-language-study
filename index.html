@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V60.3 (播放器优化版)</title>
+    <title>克语助手 V60.4 (iOS连播修复版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -142,7 +142,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V60.3</h1>
+        <h1>🇭🇷 克语助手 V60.4</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -276,7 +276,6 @@
     function speakStep(item) {
         if (!isImmersive || isPaused) return;
 
-        // 修复 1：取消暴力的 cancel() 防止吞掉中文和卡顿。
         window.utterInstance = new SpeechSynthesisUtterance(item.text);
         
         const v = voices.find(i => i.voiceURI === selectedVoiceURI);
@@ -295,7 +294,7 @@
         window.utterInstance.onend = finish;
         window.utterInstance.onerror = finish;
 
-        // 修复 2：加入看门狗定时器。如果系统吞了结束事件，2秒后强制继续，绝不卡死
+        // 依然保留看门狗定时器，防止彻底死锁
         const safeTimer = setTimeout(finish, (item.text.length * 200) + 2500);
 
         window.speechSynthesis.speak(window.utterInstance);
@@ -304,21 +303,23 @@
     function playGap() {
         if (!isImmersive || isPaused) return;
         gapAudio.currentTime = 0;
-        // 修复 3：恢复正常的 1.0 速度，防止 iOS 媒体控制器误判为在进行“特殊操作”导致图标错乱
-        gapAudio.playbackRate = 1.0; 
+        // 修复：iOS下为了连贯，不要在这里设断点。放慢语速来产生物理延迟，保持同步执行。
+        gapAudio.playbackRate = 0.8; 
         const playPromise = gapAudio.play();
         if (playPromise !== undefined) {
-            playPromise.catch(e => { setTimeout(() => { playQueueIndex++; nextStep(); }, 1000); });
+            playPromise.catch(e => {
+                // 如果极其罕见地失败了，才使用强制跳过
+                playQueueIndex++;
+                nextStep(); 
+            });
         }
     }
 
+    // 核心修复：彻底去掉 setTimeout，保持苹果系统的连续媒体权限！
     gapAudio.onended = function() {
         if (!isImmersive || isPaused) return;
-        setTimeout(() => {
-            if (!isImmersive || isPaused) return;
-            playQueueIndex++;
-            nextStep();
-        }, 500); // 增加自然停顿
+        playQueueIndex++;
+        nextStep();
     };
 
     function nextStep() {
@@ -370,6 +371,8 @@
         });
 
         playQueueIndex = 0;
+        // 先激活静音，骗过iOS
+        gapAudio.play().catch(()=>{});
         nextStep(); 
     }
 
@@ -385,21 +388,17 @@
 
     function nextWord() { 
         window.speechSynthesis.cancel(); 
-        // 修复 4：切歌时不要暂停 gapAudio，只需重置进度。这能保持系统媒体会话一直处于“播放中”，防止被踢出导致变⏩
-        gapAudio.currentTime = 0;
-        gapAudio.play().catch(()=>{});
+        gapAudio.currentTime = 0; gapAudio.play().catch(()=>{});
 
         let next = playQueueIndex + 1; 
         while(next < playQueue.length && playQueue[next].lang !== 'hr') next++; 
         playQueueIndex = next >= playQueue.length ? 0 : next; 
-        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 100); } 
+        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 50); } 
     }
 
     function prevWord() { 
         window.speechSynthesis.cancel(); 
-        // 同理保持音频激活
-        gapAudio.currentTime = 0;
-        gapAudio.play().catch(()=>{});
+        gapAudio.currentTime = 0; gapAudio.play().catch(()=>{});
 
         let prev = playQueueIndex - 1; 
         while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--; 
@@ -408,7 +407,7 @@
             while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--;
         }
         playQueueIndex = prev < 0 ? 0 : prev; 
-        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 100); }
+        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 50); }
     }
 
     function closeImmersive() { isImmersive = false; isPaused = false; document.getElementById('immersiveOverlay').style.display = 'none'; window.speechSynthesis.cancel(); gapAudio.pause(); if (wakeLock) { wakeLock.release(); wakeLock = null; } document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now')); }
@@ -543,10 +542,10 @@
     }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     
-    // --- 挑战模式 ---
+    // --- 完美还原挑战模式 ---
     let currentMode = 'quiz'; let challengeList = [];
     function setMode(m) { currentMode = m; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.id==='mode-'+m)); }
-    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
+    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; speakSingle(' ', 'hr'); challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
     
     function showQuestion() {
         if(!challengeList.length) { alert("完成！"); return exitChallenge(); }
