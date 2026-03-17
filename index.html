@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V60(完美收官)</title>
+    <title>克语助手 V60</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -189,7 +189,7 @@
     <div style="text-align:center; color:#6366f1; margin: 20px 0; cursor:pointer; font-weight:bold" onclick="togglePanel('importPanel')">＋ 录入新词</div>
     <div id="importPanel" class="panel">
         <input type="text" id="unitNameInput" class="input-box" placeholder="单元名称 (不填则添加到当前单元)">
-        <select id="insertAfterSelect" class="input-box" style="text-align: left; text-align-last: left;"></select>
+        <select id="insertAfterSelect" class="input-box" style="text-align: left; text-align-last: left; margin-bottom: 10px;"></select>
         <textarea id="importText" class="input-box" style="height:100px" placeholder="dva 2"></textarea>
         <button class="start-btn" style="margin-top:0" onclick="importWords()">确认保存</button>
     </div>
@@ -251,7 +251,7 @@
         localStorage.setItem('cro_selected_voice', selectedVoiceURI);
     }
 
-    // --- 单点发音功能（增加全局变量防GC截断） ---
+    // --- 单点发音功能 ---
     window.singleUtter = null;
     function speakSingle(text, lang) {
         window.speechSynthesis.cancel();
@@ -410,7 +410,6 @@
         unit.words.forEach((w, i) => {
             const row = document.createElement('div');
             row.className = 'word-row'; row.id = `word-row-${i}`;
-            // 核心修复：使用 .replace(/[\r\n]+/g, " ") 防止多行文本截断 onclick 字符串
             row.innerHTML = `
                 <div class="left-part" onclick="speakSingle('${w.hr.replace(/'/g,"\\'").replace(/[\r\n]+/g, " ")}', 'hr')">
                     ${audioIconSvg} <div class="col-hr" ondblclick="enableEdit(this, ${i}, 'hr')">${w.hr}</div>
@@ -462,11 +461,43 @@
         }; 
     }
     
+    // --- 录入核心修复：完美还原 V54 插入位置与提示框 ---
     function importWords() {
-        let name = document.getElementById('unitNameInput').value.trim(); const text = document.getElementById('importText').value.trim(); const after = parseInt(document.getElementById('insertAfterSelect').value);
-        if(!text) return; let targetUnitIndex = -1; if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
-        const newWords = text.split('\n').map(l => { let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); return i!==-1 ? {hr:fixCroText(l.slice(0,i).trim()), cn:fixCroText(l.slice(i).replace(/^[,;，；\s]+/,"").trim())} : {hr:fixCroText(l.trim()), cn:""}; }).filter(w => w.hr);
-        if (targetUnitIndex !== -1) { appData[targetUnitIndex].words.push(...newWords); } else { appData.push({name: name || "新单元", words: newWords}); }
+        let name = document.getElementById('unitNameInput').value.trim(); 
+        const text = document.getElementById('importText').value.trim(); 
+        const after = parseInt(document.getElementById('insertAfterSelect').value);
+        if(!text) return; 
+        
+        let targetUnitIndex = -1; 
+        if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
+        
+        const newWords = text.split('\n').map(l => { 
+            let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); 
+            return i !== -1 ? {hr: fixCroText(l.slice(0,i).trim()), cn: fixCroText(l.slice(i).replace(/^[,;，；\s]+/,"").trim())} : {hr: fixCroText(l.trim()), cn: ""}; 
+        }).filter(w => w.hr);
+        
+        if (targetUnitIndex !== -1) { 
+            const unit = appData[targetUnitIndex]; 
+            newWords.forEach(nw => { 
+                const existIdx = unit.words.findIndex(old => old.hr.toLowerCase() === nw.hr.toLowerCase()); 
+                if (existIdx !== -1) unit.words[existIdx].cn = nw.cn; 
+                else unit.words.push(nw); 
+            }); 
+            if (unit.name === "📕 错题本") {
+                notebook = JSON.parse(JSON.stringify(unit.words));
+                localStorage.setItem('cro_notebook', JSON.stringify(notebook));
+            }
+            alert(`已成功添加到当前单元: "${unit.name}"`); 
+        } else { 
+            if(!name) name = "新单元"; 
+            if(after === -1 || isNaN(after)) {
+                appData.unshift({name, words: newWords}); 
+            } else {
+                appData.splice(after + 1, 0, {name, words: newWords}); 
+            }
+            alert(`已成功创建新单元: "${name}"`); 
+        }
+        
         saveData(); render(); togglePanel('importPanel'); document.getElementById('importText').value = ''; 
     }
     
@@ -516,7 +547,7 @@
     // --- 完美还原挑战模式 ---
     let currentMode = 'quiz'; let challengeList = [];
     function setMode(m) { currentMode = m; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.id==='mode-'+m)); }
-    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
+    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; speakSingle(' ', 'hr'); challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
     
     function showQuestion() {
         if(!challengeList.length) { alert("完成！"); return exitChallenge(); }
@@ -528,7 +559,7 @@
         if (currentMode === 'mixed') { const r = Math.random(); if (challengeList.length >= 4 && r < 0.3) displayMode = 'match'; else if (r < 0.65) displayMode = 'quiz'; else displayMode = 'spell'; }
         
         if (displayMode !== 'match' && document.getElementById('autoVoice').checked) {
-            speakSingle(current.hr, 'hr');
+            speakSingle(current.hr.replace(/[\r\n]+/g, " "), 'hr');
         }
         
         if(displayMode === 'quiz') {
@@ -550,7 +581,7 @@
                 div.onclick = () => {
                     if(div.classList.contains('match-correct')) return;
                     
-                    if(i.type === 'hr') { speakSingle(i.t, 'hr'); }
+                    if(i.type === 'hr') { speakSingle(i.t.replace(/[\r\n]+/g, " "), 'hr'); }
                     
                     div.style.borderColor = "#6366f1";
                     if(!first) first = {div, i};
