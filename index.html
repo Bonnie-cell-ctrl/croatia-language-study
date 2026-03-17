@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="referrer" content="no-referrer">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>克语助手 V60</title>
+    <title>克语助手 V60.3 (播放器优化版)</title>
     <style>
         :root {
             --primary: #0056b3;
@@ -142,7 +142,7 @@
 
 <div class="sticky-header">
     <div class="header-top">
-        <h1>🇭🇷 克语助手 V60</h1>
+        <h1>🇭🇷 克语助手 V60.3</h1>
         <button class="nav-btn" style="padding: 6px 12px; font-size: 12px; background:none; border:1px solid #eee" onclick="togglePanel('syncPanel')">⚙️ 管理</button>
     </div>
     <div class="nav-controls">
@@ -262,7 +262,9 @@
         window.speechSynthesis.speak(window.singleUtter);
     }
 
+    // ==========================================
     // --- 核心播放逻辑：音频链条 (Audio Chain) ---
+    // ==========================================
     window.utterInstance = null;
     const gapAudio = document.getElementById('gapAudio');
     let isImmersive = false;
@@ -274,7 +276,7 @@
     function speakStep(item) {
         if (!isImmersive || isPaused) return;
 
-        window.speechSynthesis.cancel();
+        // 修复 1：取消暴力的 cancel() 防止吞掉中文和卡顿。
         window.utterInstance = new SpeechSynthesisUtterance(item.text);
         
         const v = voices.find(i => i.voiceURI === selectedVoiceURI);
@@ -282,8 +284,19 @@
         window.utterInstance.lang = item.lang === 'hr' ? 'hr-HR' : 'zh-CN';
         window.utterInstance.rate = 1.0;
 
-        window.utterInstance.onend = () => { if (isImmersive && !isPaused) playGap(); };
-        window.utterInstance.onerror = () => { if (isImmersive && !isPaused) playGap(); };
+        let resolved = false;
+        const finish = () => {
+            if(resolved) return;
+            resolved = true;
+            clearTimeout(safeTimer);
+            if (isImmersive && !isPaused) playGap();
+        };
+
+        window.utterInstance.onend = finish;
+        window.utterInstance.onerror = finish;
+
+        // 修复 2：加入看门狗定时器。如果系统吞了结束事件，2秒后强制继续，绝不卡死
+        const safeTimer = setTimeout(finish, (item.text.length * 200) + 2500);
 
         window.speechSynthesis.speak(window.utterInstance);
     }
@@ -291,7 +304,8 @@
     function playGap() {
         if (!isImmersive || isPaused) return;
         gapAudio.currentTime = 0;
-        gapAudio.playbackRate = 0.5; 
+        // 修复 3：恢复正常的 1.0 速度，防止 iOS 媒体控制器误判为在进行“特殊操作”导致图标错乱
+        gapAudio.playbackRate = 1.0; 
         const playPromise = gapAudio.play();
         if (playPromise !== undefined) {
             playPromise.catch(e => { setTimeout(() => { playQueueIndex++; nextStep(); }, 1000); });
@@ -300,8 +314,11 @@
 
     gapAudio.onended = function() {
         if (!isImmersive || isPaused) return;
-        playQueueIndex++;
-        nextStep();
+        setTimeout(() => {
+            if (!isImmersive || isPaused) return;
+            playQueueIndex++;
+            nextStep();
+        }, 500); // 增加自然停顿
     };
 
     function nextStep() {
@@ -340,8 +357,8 @@
         if ('mediaSession' in navigator) {
             navigator.mediaSession.setActionHandler('play', togglePause);
             navigator.mediaSession.setActionHandler('pause', togglePause);
-            navigator.mediaSession.setActionHandler('nexttrack', nextWord);
-            navigator.mediaSession.setActionHandler('previoustrack', prevWord);
+            navigator.mediaSession.setActionHandler('nexttrack', () => { nextWord(); });
+            navigator.mediaSession.setActionHandler('previoustrack', () => { prevWord(); });
         }
 
         playQueue = [];
@@ -359,20 +376,31 @@
     function togglePause() {
         isPaused = !isPaused;
         const btn = document.getElementById('immPlayBtn');
-        if (isPaused) { window.speechSynthesis.cancel(); gapAudio.pause(); btn.innerText = '▶️'; btn.classList.remove('active'); } 
-        else { btn.innerText = '⏸'; btn.classList.add('active'); nextStep(); }
+        if (isPaused) { 
+            window.speechSynthesis.cancel(); gapAudio.pause(); btn.innerText = '▶️'; btn.classList.remove('active'); 
+        } else { 
+            btn.innerText = '⏸'; btn.classList.add('active'); nextStep(); 
+        }
     }
 
     function nextWord() { 
-        window.speechSynthesis.cancel(); gapAudio.pause(); 
+        window.speechSynthesis.cancel(); 
+        // 修复 4：切歌时不要暂停 gapAudio，只需重置进度。这能保持系统媒体会话一直处于“播放中”，防止被踢出导致变⏩
+        gapAudio.currentTime = 0;
+        gapAudio.play().catch(()=>{});
+
         let next = playQueueIndex + 1; 
         while(next < playQueue.length && playQueue[next].lang !== 'hr') next++; 
         playQueueIndex = next >= playQueue.length ? 0 : next; 
-        if(isPaused) togglePause(); else nextStep(); 
+        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 100); } 
     }
 
     function prevWord() { 
-        window.speechSynthesis.cancel(); gapAudio.pause(); 
+        window.speechSynthesis.cancel(); 
+        // 同理保持音频激活
+        gapAudio.currentTime = 0;
+        gapAudio.play().catch(()=>{});
+
         let prev = playQueueIndex - 1; 
         while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--; 
         if (prev < 0) {
@@ -380,7 +408,7 @@
             while(prev >= 0 && playQueue[prev].lang !== 'hr') prev--;
         }
         playQueueIndex = prev < 0 ? 0 : prev; 
-        if(isPaused) togglePause(); else nextStep(); 
+        if(isPaused) { updateUI(playQueue[playQueueIndex]); } else { setTimeout(nextStep, 100); }
     }
 
     function closeImmersive() { isImmersive = false; isPaused = false; document.getElementById('immersiveOverlay').style.display = 'none'; window.speechSynthesis.cancel(); gapAudio.pause(); if (wakeLock) { wakeLock.release(); wakeLock = null; } document.querySelectorAll('.word-row').forEach(r => r.classList.remove('playing-now')); }
@@ -461,43 +489,14 @@
         }; 
     }
     
-    // --- 录入核心修复：完美还原 V54 插入位置与提示框 ---
     function importWords() {
-        let name = document.getElementById('unitNameInput').value.trim(); 
-        const text = document.getElementById('importText').value.trim(); 
-        const after = parseInt(document.getElementById('insertAfterSelect').value);
-        if(!text) return; 
-        
-        let targetUnitIndex = -1; 
-        if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
-        
-        const newWords = text.split('\n').map(l => { 
-            let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); 
-            return i !== -1 ? {hr: fixCroText(l.slice(0,i).trim()), cn: fixCroText(l.slice(i).replace(/^[,;，；\s]+/,"").trim())} : {hr: fixCroText(l.trim()), cn: ""}; 
-        }).filter(w => w.hr);
-        
-        if (targetUnitIndex !== -1) { 
-            const unit = appData[targetUnitIndex]; 
-            newWords.forEach(nw => { 
-                const existIdx = unit.words.findIndex(old => old.hr.toLowerCase() === nw.hr.toLowerCase()); 
-                if (existIdx !== -1) unit.words[existIdx].cn = nw.cn; 
-                else unit.words.push(nw); 
-            }); 
-            if (unit.name === "📕 错题本") {
-                notebook = JSON.parse(JSON.stringify(unit.words));
-                localStorage.setItem('cro_notebook', JSON.stringify(notebook));
-            }
-            alert(`已成功添加到当前单元: "${unit.name}"`); 
-        } else { 
+        let name = document.getElementById('unitNameInput').value.trim(); const text = document.getElementById('importText').value.trim(); const after = parseInt(document.getElementById('insertAfterSelect').value);
+        if(!text) return; let targetUnitIndex = -1; if (!name && currentUnitIdx !== -1) targetUnitIndex = currentUnitIdx;
+        const newWords = text.split('\n').map(l => { let i = l.search(/[\u4e00-\u9fa5|0-9|,|;|，|；]/); return i!==-1 ? {hr:fixCroText(l.slice(0,i).trim()), cn:fixCroText(l.slice(i).replace(/^[,;，；\s]+/,"").trim())} : {hr:fixCroText(l.trim()), cn:""}; }).filter(w => w.hr);
+        if (targetUnitIndex !== -1) { appData[targetUnitIndex].words.push(...newWords); } else { 
             if(!name) name = "新单元"; 
-            if(after === -1 || isNaN(after)) {
-                appData.unshift({name, words: newWords}); 
-            } else {
-                appData.splice(after + 1, 0, {name, words: newWords}); 
-            }
-            alert(`已成功创建新单元: "${name}"`); 
+            if(after === -1 || isNaN(after)) { appData.unshift({name, words: newWords}); } else { appData.splice(after + 1, 0, {name, words: newWords}); }
         }
-        
         saveData(); render(); togglePanel('importPanel'); document.getElementById('importText').value = ''; 
     }
     
@@ -544,10 +543,10 @@
     }
     function exitNotebookMode() { localStorage.setItem('cro_viewing_notebook', 'false'); }
     
-    // --- 完美还原挑战模式 ---
+    // --- 挑战模式 ---
     let currentMode = 'quiz'; let challengeList = [];
     function setMode(m) { currentMode = m; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.id==='mode-'+m)); }
-    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; speakSingle(' ', 'hr'); challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
+    function startChallenge() { const unit = appData[currentUnitIdx]; if(!unit||!unit.words.length) return; challengeList = JSON.parse(JSON.stringify(unit.words)).sort(()=>Math.random()-0.5); document.getElementById('challengeOverlay').style.display='flex'; showQuestion(); }
     
     function showQuestion() {
         if(!challengeList.length) { alert("完成！"); return exitChallenge(); }
